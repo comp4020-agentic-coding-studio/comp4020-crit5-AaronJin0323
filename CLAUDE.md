@@ -98,6 +98,29 @@ so the old lint-specific notes were dropped along with it.)
   that hides the page before capturing it can't also click a control hidden
   that way. Interact first, then hide, then capture --- and hash output files
   before trusting a sweep that looks suspiciously uniform.
+- **A suite of rules can be green while the rules add up to something
+  impossible.** Every test passed on a build whose boss fight could not be
+  finished by playing it correctly: each rule was right, and their sum was
+  unwinnable. When the artefact has a success condition --- a game to win, a
+  flow to complete, a form to get to the end of --- write a bot that attempts
+  the whole thing over many random seeds and *measure* it. Assertions cover
+  rules; only an end-to-end attempt covers whether the rules compose. Keep it
+  out of `check`: it produces a number to read, not a threshold to enforce, and
+  a bot is a ceiling rather than a typical user.
+- **Attribute a symptom before tuning anything.** The instinct was that the
+  enemies were too strong; logging which specific source caused each point of
+  damage put every one of them on the boss. One diagnostic pass beat three
+  rounds of guessing at numbers.
+- **Two files agreeing on a string is a fact a test can hold, even when the
+  thing it controls isn't testable.** A stylesheet selecting `[x="lost"]` and
+  the code writing `"loss"` is a bug no assertion about colour could ever
+  catch --- but "every value the CSS selects is a value the code writes" is
+  mechanical. Same shape for routes and links, or a data attribute and its
+  consumer. When the visible symptom is out of reach, test the agreement
+  underneath it.
+- **A regression test written after the fix has never been seen to fail.**
+  Reintroduce the bug, watch it go red, then restore. Otherwise you have
+  shipped a test that asserts something true for reasons you haven't checked.
 
 ## Working style
 
