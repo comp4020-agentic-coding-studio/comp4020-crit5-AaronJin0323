@@ -1,70 +1,52 @@
 # Process overview
 
-<!-- TEMPLATE: this file is a shape to fill in, not a form. Replace everything
-     in it with your own overview, and delete this comment — `pnpm
-     check:evidence` will remind you if it's still here. -->
-
-A reading-guide to how the work came together --- a map to your process, not an
-essay about it. Markers read this file and follow its citations; they don't
-trawl the repo for evidence you didn't point at, so if a moment mattered, cite
-it.
-
-This file is the shape; the course site's
-[assessment page](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/topics/assessment/#what-you-submit)
-is the requirement, and its
-[word counts](https://comp.anu.edu.au/courses/comp4020-agentic-coding-studio/topics/assessment/#word-counts)
-cover every deliverable.
-
-## What I built
-
-One paragraph: the thing, and the idea behind it.
+**LABYRINTH: Favour of the Gods** — five chambers, three hearts, one rule:
+moving into an enemy is how you attack, so every step is also a decision about
+position. No instructions anywhere.
 
 ## The moments that mattered
 
-Three or four for an assignment; fewer is fine for a weekly prototype. Keep the
-list short so each moment has room to do all four jobs:
+### The suite was green and the game could not be won
 
-1. **what happened** --- the problem, or the thing that went wrong
-2. **what you did instead of the obvious thing** --- the call you made, and why
-   it beat the obvious one
-3. **how you knew it was right** --- the check you ran, the viewport you looked
-   at, what you read before accepting the diff
-4. **the citation** --- a commit or commit range, a `CLAUDE.md` change, a check
-   that went from red to green, a prompt paired with the commit it produced
+Thirty tests passed on a build whose Minotaur could not be beaten: its stun was
+decremented again by the following enemy turn, so correct play bought one blow
+per charge against five hit points. Every rule was right; only their sum was
+broken. So I wrote a bot that plays whole runs — 300 seeds, 3% wins — and logged
+which telegraph caused each wound: the blame was the boss's, not the enemies I
+had assumed. 181/300 after. It is `pnpm balance` now, deliberately not part of
+`check`: a number to read, not a threshold to enforce.
 
-Jobs 2 and 3 are the ones the repo can't tell a reader on its own, so they're
-where the marks are. The strongest moments are the ones where a correction
-landed in the **harness** --- the standards and checks your work has to satisfy
---- rather than in a retry: a rule added to `CLAUDE.md`, a check wired up, an
-attempt thrown away. Retrying until it passes is the routine case, and changing
-what the work runs against is the skilled one.
+[`a574b7c`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-AaronJin0323/commit/a574b7c)
+· [`832e053`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-AaronJin0323/commit/832e053)
 
-Cite each moment as a link whose text is the commit hash or range and whose
-target is this repo's commit or compare URL, so a reader clicks straight to the
-evidence:
+### The change that came from playing — spec line 5
 
-- one commit: [`a1b2c3d`](https://github.com/YOUR-ORG/YOUR-REPO/commit/a1b2c3d)
-- a range:
-  [`a1b2c3d...e4f5a6b`](https://github.com/YOUR-ORG/YOUR-REPO/compare/a1b2c3d...e4f5a6b)
+The opening chamber cost me a heart every single run. A skeleton beside Theseus
+marks the tile he is on, so attacking it always ate the hit and retreating meant
+never attacking: the chamber that teaches what the sword does charged a third of
+a life for the lesson. A landed blow now interrupts its
+target's wind-up. The existing test *encoded* the bug, so its arena had to grow
+a second guard.
 
-To pair a prompt with the commit it produced, quote the prompt (curated, not a
-full transcript) next to the citation:
+[`71fc052`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-AaronJin0323/commit/71fc052)
 
-> the prompt, verbatim
+### Gold is the wrong colour for dying
 
-Screenshots are welcome where one carries the verification better than a
-sentence does. Commit the file to this repo and link it with a **relative**
-path, which is what makes it render on GitHub: `![alt text](docs/before.png)`.
-Images don't count towards the word count and don't replace the citation.
+"THE LABYRINTH CLAIMS ANOTHER HERO" rendered in celebratory gold: the stylesheet
+dressed `[data-ended="lost"]`, the renderer writes `"loss"`. Reading a
+screenshot found it; nothing else could. The guard I added doesn't test the
+colour but the agreement underneath — every `data-ended` value the CSS selects
+must be one the renderer writes — and I reverted the selector to watch it fail
+before trusting it.
 
-## Before you ship
+[`540d084`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-AaronJin0323/commit/540d084)
 
-`pnpm check:evidence` verifies your citations resolve to real commits, that a
-reflection entry the marker reads is in `reflections/`, and that your
-`CLAUDE.md` is there --- before a marker ever opens the file. It checks that
-your map is traceable, not that it is good: the marker judges whether your
-small, deliberately chosen set of moments shows real judgement and reflection. A
-green check is not a substitute for that curation.
+## Directing it
 
-Images aren't checked: unlike a citation whose SHA doesn't resolve, a broken
-image is visible the moment this file is rendered on GitHub.
+One line of the brief did most of the tuning:
+
+> forgiving rather than punishing — precision timing should not be required
+
+So a wave never fields two gorgons — their line-marks cover your tile and all four
+neighbours, which is damage with no answer — and crossing a
+threshold restores a heart.
