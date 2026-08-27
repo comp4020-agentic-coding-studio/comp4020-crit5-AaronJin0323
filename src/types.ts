@@ -52,9 +52,9 @@ export type Phase = "playing" | "blessing" | "won" | "lost";
 export type GameEvent =
   | { t: "move"; from: Vec; to: Vec }
   | { t: "blocked"; at: Vec }
-  | { t: "attack"; at: Vec; damage: number; killed: boolean }
+  | { t: "attack"; id: number; at: Vec; damage: number; killed: boolean }
   | { t: "clang"; at: Vec }
-  | { t: "chain"; at: Vec; killed: boolean }
+  | { t: "chain"; id: number; at: Vec; killed: boolean }
   | { t: "push"; from: Vec; to: Vec }
   | { t: "hurt"; at: Vec }
   | { t: "shielded"; at: Vec }

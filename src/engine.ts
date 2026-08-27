@@ -191,7 +191,7 @@ export class Engine {
     if (this.hasBlessing("ares") && this.aresTurns > 0) damage += 1;
 
     const killed = this.wound(foe, damage);
-    ev.push({ t: "attack", at, damage, killed });
+    ev.push({ t: "attack", id: foe.id, at, damage, killed });
     if (killed && this.hasBlessing("ares")) this.aresTurns = 3;
 
     if (this.hasBlessing("zeus")) {
@@ -199,7 +199,7 @@ export class Engine {
       if (near) {
         const chainAt = { ...near.pos };
         const chainKilled = this.wound(near, 1);
-        ev.push({ t: "chain", at: chainAt, killed: chainKilled });
+        ev.push({ t: "chain", id: near.id, at: chainAt, killed: chainKilled });
       }
     }
 

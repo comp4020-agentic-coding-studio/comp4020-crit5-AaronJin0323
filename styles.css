@@ -1,16 +1,617 @@
+/* Ancient sandstone lit from a long way off: near-black navy ground, bronze
+   edges, and only two colours that ever mean anything --- red is about to
+   hurt you, blue-white is a god. Everything else is architecture. */
+
+:root {
+  --void: #080b14;
+  --deep: #0d1222;
+  --floor: #141b30;
+  --floor-lit: #1a2340;
+  --stone: #232c47;
+  --sand: #e0cfa6;
+  --bronze: #b8862c;
+  --gold: #f3cd6b;
+  --blood: #c0374f;
+  --divine: #cfe9ff;
+  --bone: #e8e2d0;
+
+  /* Held once so the board can subtract it and never overflow the first
+     screen --- the bar's height and the board's height are the same sum. */
+  --nav-h: 3.25rem;
+  --cell: calc(100% / 9);
+
+  --meander: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44'%3E%3Cpath d='M2 34h10V12h20v20H22V22' fill='none' stroke='%23b8862c' stroke-width='2'/%3E%3C/svg%3E");
+}
+
+* {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
-  padding: 2rem;
-  font-family: system-ui, sans-serif;
-  line-height: 1.6;
-  color: #1a1a1a;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--void);
+  color: var(--sand);
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
 }
+
+/* The labyrinth itself, wound faintly behind everything. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image: var(--meander);
+  opacity: 0.045;
+  pointer-events: none;
+}
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* --- the bar ---------------------------------------------------------- */
+
+.hud {
+  height: var(--nav-h);
+  width: min(100%, 620px);
+  padding: 0 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  position: relative;
+  z-index: 2;
+}
+
+.hud h1 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--gold);
+  line-height: 1.1;
+}
+
+.hud h1 span {
+  display: block;
+  font-size: 0.55rem;
+  letter-spacing: 0.16em;
+  color: var(--bronze);
+  opacity: 0.85;
+}
+
+.hearts {
+  display: flex;
+  gap: 0.3rem;
+  margin-left: auto;
+}
+
+.heart {
+  width: 0.9rem;
+  height: 0.9rem;
+  background: var(--blood);
+  clip-path: polygon(50% 100%, 0 38%, 12% 8%, 50% 26%, 88% 8%, 100% 38%);
+  transition:
+    opacity 220ms,
+    transform 220ms;
+}
+
+.heart.spent {
+  opacity: 0.16;
+  transform: scale(0.72);
+  background: var(--stone);
+}
+
+.chambers {
+  display: flex;
+  gap: 0.28rem;
+}
+
+.pip {
+  width: 0.42rem;
+  height: 0.42rem;
+  border: 1px solid var(--bronze);
+  transform: rotate(45deg);
+  opacity: 0.5;
+}
+
+.pip.done {
+  background: var(--gold);
+  opacity: 1;
+}
+
+.pip.here {
+  background: var(--sand);
+  opacity: 1;
+  box-shadow: 0 0 8px var(--gold);
+}
+
+.mute {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--bronze);
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+}
+
+.mute:hover {
+  color: var(--gold);
+}
+
+.mute[aria-pressed="true"] {
+  opacity: 0.35;
+  text-decoration: line-through;
+}
+
+/* --- the board -------------------------------------------------------- */
 
 main {
-  max-width: 40rem;
-  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
 }
 
-a {
-  color: #0b5fff;
+.stage {
+  position: relative;
+  width: min(92vw, calc(100svh - var(--nav-h) - 5rem), 540px);
+  aspect-ratio: 1;
+  border: 2px solid var(--bronze);
+  outline: 6px solid var(--deep);
+  box-shadow:
+    0 0 0 7px rgb(184 134 44 / 0.25),
+    0 24px 60px rgb(0 0 0 / 0.7);
+  background: var(--deep);
+}
+
+.stage.jolt {
+  animation: jolt 220ms ease-out;
+}
+
+@keyframes jolt {
+  25% {
+    transform: translate(4px, -3px);
+  }
+  50% {
+    transform: translate(-5px, 2px);
+  }
+  75% {
+    transform: translate(3px, 3px);
+  }
+}
+
+.board {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+}
+
+.tile {
+  position: relative;
+}
+
+.tile.floor {
+  background: var(--floor);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.022);
+}
+
+/* A faint checker, so the grid reads as tiles you step between rather than
+   open ground you slide across. */
+.tile.floor.alt {
+  background: var(--floor-lit);
+}
+
+.tile.wall {
+  background: var(--stone);
+  box-shadow:
+    inset 0 2px 0 rgb(255 255 255 / 0.05),
+    inset 0 -2px 0 rgb(0 0 0 / 0.35);
+}
+
+.tile.exit {
+  background: #0b0f1c;
+  box-shadow: inset 0 0 0 2px rgb(184 134 44 / 0.45);
+}
+
+/* Shut, and visibly so: three bars across the dark. */
+.tile.exit::after {
+  content: "";
+  position: absolute;
+  inset: 22% 18%;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--bronze) 0 2px,
+    transparent 2px 33%
+  );
+  opacity: 0.7;
+  transition: opacity 300ms;
+}
+
+.tile.exit.open {
+  background: radial-gradient(circle at 50% 60%, var(--gold), #7a5410 70%);
+  animation: doorway 2.2s ease-in-out infinite;
+}
+
+.tile.exit.open::after {
+  opacity: 0;
+}
+
+@keyframes doorway {
+  50% {
+    box-shadow: 0 0 26px 6px rgb(243 205 107 / 0.55);
+  }
+}
+
+/* Red means a blow lands here on the next beat. It is the only red on screen. */
+.tile.danger::before {
+  content: "";
+  position: absolute;
+  inset: 8%;
+  border: 2px solid var(--blood);
+  background: rgb(192 55 79 / 0.16);
+  animation: peril 620ms ease-in-out infinite alternate;
+}
+
+@keyframes peril {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 1;
+    background: rgb(192 55 79 / 0.34);
+  }
+}
+
+/* --- who is standing where ------------------------------------------- */
+
+.actors {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.actor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--cell);
+  height: var(--cell);
+  display: grid;
+  place-items: center;
+  transform: translate(calc(var(--x) * 100%), calc(var(--y) * 100%));
+  transition: transform 120ms cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+
+.actor svg {
+  width: 78%;
+  height: 78%;
+  overflow: visible;
+}
+
+.actor.hero svg {
+  filter: drop-shadow(0 0 7px rgb(243 205 107 / 0.5));
+}
+
+.actor.minotaur svg {
+  width: 96%;
+  height: 96%;
+}
+
+.actor.stunned {
+  animation: reel 700ms ease-in-out infinite;
+}
+
+.actor.stunned svg {
+  filter: drop-shadow(0 0 10px var(--divine));
+}
+
+@keyframes reel {
+  50% {
+    transform: translate(calc(var(--x) * 100%), calc(var(--y) * 100% - 6%))
+      rotate(7deg);
+  }
+}
+
+.actor.struck {
+  animation: struck 220ms ease-out;
+}
+
+@keyframes struck {
+  0% {
+    filter: brightness(6) saturate(0);
+  }
+  40% {
+    transform: translate(calc(var(--x) * 100% + 9%), calc(var(--y) * 100%));
+  }
+  70% {
+    transform: translate(calc(var(--x) * 100% - 7%), calc(var(--y) * 100%));
+  }
+}
+
+.actor.dying {
+  animation: dying 260ms ease-in forwards;
+}
+
+@keyframes dying {
+  to {
+    opacity: 0;
+    transform: translate(calc(var(--x) * 100%), calc(var(--y) * 100%)) scale(0.2)
+      rotate(120deg);
+  }
+}
+
+.actor.wounded {
+  animation: wounded 320ms ease-out;
+}
+
+@keyframes wounded {
+  0%,
+  100% {
+    filter: none;
+  }
+  30% {
+    filter: drop-shadow(0 0 14px var(--blood)) brightness(2.4);
+  }
+}
+
+.actor.warded svg {
+  animation: warded 500ms ease-out;
+}
+
+@keyframes warded {
+  0% {
+    filter: drop-shadow(0 0 22px var(--divine)) brightness(3);
+  }
+}
+
+/* --- the opening chevron --------------------------------------------- */
+
+.hint {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--cell);
+  height: var(--cell);
+  display: grid;
+  place-items: center;
+  transform: translate(calc(var(--x) * 100%), calc(var(--y) * 100%));
+  color: var(--gold);
+  font-size: clamp(1rem, 4vw, 1.6rem);
+  line-height: 1;
+  pointer-events: none;
+  animation: beckon 1.5s ease-in-out infinite;
+  transition: opacity 400ms;
+}
+
+.hint.spent {
+  opacity: 0;
+}
+
+@keyframes beckon {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translate(calc(var(--x) * 100%), calc(var(--y) * 100% + 14%));
+  }
+  50% {
+    opacity: 1;
+    transform: translate(calc(var(--x) * 100%), calc(var(--y) * 100% - 12%));
+  }
+}
+
+/* --- the Minotaur's health ------------------------------------------- */
+
+.boss {
+  width: min(92vw, 540px);
+}
+
+.boss-bar {
+  height: 5px;
+  background: rgb(255 255 255 / 0.07);
+  border: 1px solid rgb(184 134 44 / 0.4);
+}
+
+.boss-bar i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #7c1f2f, var(--blood));
+  transition: width 260ms ease-out;
+}
+
+/* --- gods, and endings ------------------------------------------------ */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-content: center;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  background: rgb(6 9 17 / 0.9);
+  backdrop-filter: blur(3px);
+  animation: rise 260ms ease-out;
+}
+
+.overlay[hidden] {
+  display: none;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+  }
+}
+
+.gods {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.god {
+  width: min(38vw, 200px);
+  padding: 1.75rem 1rem;
+  display: grid;
+  gap: 0.6rem;
+  place-items: center;
+  text-align: center;
+  background: linear-gradient(180deg, #131a2e, #0a0e1a);
+  border: 1px solid var(--bronze);
+  color: var(--sand);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    transform 160ms,
+    box-shadow 160ms,
+    border-color 160ms;
+}
+
+.god:hover,
+.god:focus-visible {
+  transform: translateY(-6px);
+  border-color: var(--gold);
+  box-shadow: 0 0 34px rgb(207 233 255 / 0.28);
+  outline: none;
+}
+
+.god .symbol {
+  font-size: 2.6rem;
+  line-height: 1;
+  filter: drop-shadow(0 0 12px rgb(207 233 255 / 0.5));
+}
+
+.god .name {
+  font-size: 1.05rem;
+  letter-spacing: 0.18em;
+  color: var(--gold);
+}
+
+.god .effect {
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  opacity: 0.78;
+  max-width: 15ch;
+}
+
+.verdict {
+  margin: 0;
+  text-align: center;
+  font-size: clamp(1.15rem, 4.5vw, 1.9rem);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.end[data-ended="lost"] .verdict {
+  color: var(--blood);
+}
+
+.tally {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0.35rem 1.25rem;
+  justify-content: center;
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+}
+
+.tally dt {
+  opacity: 0.6;
+}
+
+.tally dd {
+  margin: 0;
+  color: var(--gold);
+  text-align: right;
+}
+
+.favour {
+  display: flex;
+  gap: 0.9rem;
+  justify-content: center;
+  font-size: 1.7rem;
+  min-height: 1.7rem;
+}
+
+.again {
+  justify-self: center;
+  padding: 0.85rem 2.5rem;
+  background: none;
+  border: 1px solid var(--bronze);
+  color: var(--sand);
+  font: inherit;
+  font-size: 0.85rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    background 200ms,
+    color 200ms;
+}
+
+.again:hover,
+.again:focus-visible {
+  background: var(--gold);
+  color: var(--void);
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* --- impact ----------------------------------------------------------- */
+
+.spark {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--cell);
+  height: var(--cell);
+  transform: translate(calc(var(--x) * 100%), calc(var(--y) * 100%));
+  pointer-events: none;
+  animation: spark 380ms ease-out forwards;
+}
+
+.spark::before {
+  content: "";
+  position: absolute;
+  inset: 18%;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--tone), transparent 70%);
+}
+
+@keyframes spark {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    /* Position and scale live on different elements elsewhere; here the
+       translate is fixed for the tile, so scaling it is safe. */
+    scale: 2.1;
+  }
 }
