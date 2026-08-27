@@ -186,6 +186,14 @@ export class Engine {
       return ev;
     }
 
+    // A blow that lands interrupts the wind-up: whatever this foe marked on
+    // its last turn goes out with it. Without this, a foe standing next to you
+    // marks the tile you are on, so every single strike traded a heart --- the
+    // opening chamber charged the player a third of their life for working out
+    // what the sword does. Two foes closing at once still only let you
+    // interrupt one, so which one you hit is still the decision.
+    this.telegraphs = this.telegraphs.filter((t) => t.ownerId !== foe.id);
+
     let damage = 1;
     if (this.hasBlessing("artemis") && this.strikes % 3 === 0) damage *= 2;
     if (this.hasBlessing("ares") && this.aresTurns > 0) damage += 1;

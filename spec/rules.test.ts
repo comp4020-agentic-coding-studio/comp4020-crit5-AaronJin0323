@@ -65,19 +65,37 @@ describe("movement", () => {
 
 describe("a marked tile", () => {
   // The same board, one keypress apart: the only difference is whether
-  // Theseus was still standing there when it went off.
+  // Theseus was still standing there when it went off. Two guards, because a
+  // blow interrupts the foe it lands on --- so the mark under test belongs to
+  // the one he doesn't swing at.
   function marked(): Engine {
     const e = arena();
     const guard = foe("skeleton", 5, 4);
-    e.enemies = [guard];
-    e.telegraphs = [{ ownerId: guard.id, tiles: [{ x: 4, y: 4 }], kind: "strike" }];
+    const other = foe("skeleton", 4, 5);
+    e.enemies = [guard, other];
+    e.telegraphs = [{ ownerId: other.id, tiles: [{ x: 4, y: 4 }], kind: "strike" }];
     return e;
   }
 
   it("wounds Theseus if he is still on it", () => {
     const e = marked();
-    e.input("right"); // strikes the guard, so he never leaves the tile
+    e.input("right"); // he turns on the other guard, so he never leaves the tile
     expect(e.player.hearts).toBe(2);
+  });
+
+  it("goes out when Theseus interrupts the foe that made it", () => {
+    // Found by playing: a foe standing next to you marks the tile you are on,
+    // so before this rule existed every exchange cost a heart and the opening
+    // chamber charged a third of a life for learning what the sword does.
+    const e = arena();
+    const guard = foe("skeleton", 5, 4);
+    e.enemies = [guard];
+    e.telegraphs = [{ ownerId: guard.id, tiles: [{ x: 4, y: 4 }], kind: "strike" }];
+
+    e.input("right");
+
+    expect(e.player.hearts).toBe(3);
+    expect(guard.hp).toBe(1);
   });
 
   it("misses him if he stepped away", () => {
