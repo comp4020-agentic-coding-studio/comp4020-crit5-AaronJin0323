@@ -5,7 +5,11 @@ import { View } from "./src/render.ts";
 import { Sound } from "./src/audio.ts";
 import type { Dir, GameEvent, GodId } from "./src/types.ts";
 
-const game = new Engine();
+// A run is seeded, so `?seed=7` replays the exact same five chambers --- which
+// is how a bug found while playing gets looked at twice. No seed, no URL, no
+// difference to anyone who just opens the page.
+const seed = Number(new URLSearchParams(location.search).get("seed"));
+const game = new Engine(Number.isFinite(seed) && seed !== 0 ? seed : undefined);
 const view = new View();
 const sound = new Sound();
 

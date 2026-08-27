@@ -102,7 +102,10 @@ const WAVES: { count: number; kinds: EnemyKind[] }[] = [
   { count: 1, kinds: ["skeleton"] },
   { count: 2, kinds: ["skeleton", "skeleton", "harpy"] },
   { count: 3, kinds: ["skeleton", "harpy", "gorgon"] },
-  { count: 4, kinds: ["skeleton", "harpy", "gorgon", "gorgon"] },
+  // Never two gorgons. Their marks are whole lines, so a pair at right angles
+  // covers your tile and all four neighbours at once --- damage with no answer,
+  // which is the one thing this fight is not allowed to do.
+  { count: 4, kinds: ["skeleton", "skeleton", "harpy", "gorgon"] },
 ];
 
 export const CHAMBER_COUNT = 5;

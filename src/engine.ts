@@ -34,7 +34,7 @@ export const GODS: readonly God[] = [
   { id: "hermes", name: "HERMES", symbol: "💨", effect: "Sometimes a second step" },
 ];
 
-const HP: Record<EnemyKind, number> = { skeleton: 2, harpy: 1, gorgon: 2, minotaur: 5 };
+const HP: Record<EnemyKind, number> = { skeleton: 2, harpy: 1, gorgon: 2, minotaur: 4 };
 
 /** How far a kind travels in one turn. */
 const SPEED: Record<EnemyKind, number> = { skeleton: 1, harpy: 2, gorgon: 1, minotaur: 1 };
@@ -109,6 +109,14 @@ export class Engine {
       stationary: index === 0,
     }));
     if (this.enemies.length === 0) this.exitOpen = true;
+
+    // Crossing a threshold gives a heart back, to a maximum of three. Without
+    // it a run is decided by whichever chamber went badly rather than by the
+    // Minotaur, and there is no way to recover from an early mistake --- which
+    // is the opposite of "try again, you have learnt something".
+    if (index > 0) {
+      this.player.hearts = Math.min(this.player.maxHearts, this.player.hearts + 1);
+    }
   }
 
   restart(seed: number = Date.now()): void {
@@ -281,8 +289,11 @@ export class Engine {
     m.pos = { ...dest };
     ev.push({ t: "charge", path: t.tiles, hit });
     if (hit) ev.push(...this.hurt());
-    // It wakes faster the more it is wounded.
-    m.stunned = m.hp > 3 ? 2 : 1;
+    // A stun has to be long enough to be worth answering. It is decremented
+    // once more by the enemy turn that follows this one, so 3 buys two blows
+    // and 2 buys one --- and it wakes faster the more it is wounded, which is
+    // the "again, but harder" the fight is built on.
+    m.stunned = m.hp > 2 ? 3 : 2;
     ev.push({ t: "stunned", at: { ...m.pos } });
     return ev;
   }
@@ -325,7 +336,10 @@ export class Engine {
   private minotaurTurn(m: Enemy): GameEvent[] {
     const line = this.lineToPlayer(m);
     if (line) return this.mark(m, line, "charge");
+    // Half-dead, it hunts at a run: it finds your row or column in one turn
+    // instead of two, so the gap between charges closes as the fight goes on.
     this.stepToward(m);
+    if (m.hp <= 2 && !this.lineToPlayer(m)) this.stepToward(m);
     return [];
   }
 

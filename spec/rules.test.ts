@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { Engine } from "../src/engine.ts";
 import type { Enemy, EnemyKind } from "../src/types.ts";
 
-const HP: Record<EnemyKind, number> = { skeleton: 2, harpy: 1, gorgon: 2, minotaur: 5 };
+const HP: Record<EnemyKind, number> = { skeleton: 2, harpy: 1, gorgon: 2, minotaur: 4 };
 
 /** A bare walled room, so a rule can be tested without a chamber's furniture. */
 function arena(): Engine {
@@ -124,14 +124,17 @@ describe("the Minotaur", () => {
     e.enemies = [minotaur];
     e.bossRoom = true;
 
+    // Against its own maxHp, not a number --- the rule is "a blade does
+    // nothing until it is reeling", and that shouldn't break when the fight
+    // gets retuned.
     const clang = e.input("right");
-    expect(minotaur.hp).toBe(5);
+    expect(minotaur.hp).toBe(minotaur.maxHp);
     expect(clang.some((x) => x.t === "clang")).toBe(true);
 
     e.telegraphs = [];
     minotaur.stunned = 2;
     e.input("right");
-    expect(minotaur.hp).toBe(4);
+    expect(minotaur.hp).toBe(minotaur.maxHp - 1);
   });
 });
 
