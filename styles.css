@@ -526,7 +526,7 @@ main {
   color: var(--gold);
 }
 
-.end[data-ended="lost"] .verdict {
+.end[data-ended="loss"] .verdict {
   color: var(--blood);
 }
 

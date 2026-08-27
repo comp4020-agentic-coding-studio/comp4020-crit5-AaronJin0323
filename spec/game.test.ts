@@ -52,6 +52,24 @@ describe("a game", () => {
     }
   });
 
+  it("styles only the endings the renderer can actually write", () => {
+    // Found by looking at a screenshot: the loss verdict was meant to be red
+    // and came out gold, because the stylesheet said [data-ended="lost"] and
+    // the renderer writes "loss". No test could see the colour --- but the two
+    // files disagreeing is a fact, and this is that fact.
+    const css = readFileSync(resolve("styles.css"), "utf8");
+    const view = readFileSync(resolve("src/render.ts"), "utf8");
+
+    const styled = [...css.matchAll(/\[data-ended="([^"]+)"\]/g)].map((m) => m[1]!);
+    expect(styled.length, "no [data-ended] rules in styles.css").toBeGreaterThan(0);
+    for (const value of styled) {
+      expect(
+        view.includes(`"${value}"`),
+        `styles.css dresses [data-ended="${value}"], which the renderer never writes`,
+      ).toBe(true);
+    }
+  });
+
   it("ships no separate instructions page", () => {
     // "no instructions anywhere ... off [screen]" --- no README-as-a-page,
     // no how-to-play route sitting next to the game.
