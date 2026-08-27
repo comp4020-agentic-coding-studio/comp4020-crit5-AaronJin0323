@@ -41,6 +41,8 @@ before trusting it.
 
 [`540d084`](https://github.com/comp4020-agentic-coding-studio/comp4020-crit5-AaronJin0323/commit/540d084)
 
+![The same loss screen twice: celebratory gold above, blood red below](docs/loss-verdict.png)
+
 ## Directing it
 
 One line of the brief did most of the tuning:
