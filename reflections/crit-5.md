@@ -1,25 +1,28 @@
 # Crit 5 — A game
 
-**The breakthrough** was admitting I could not judge this game by looking at it.
-I had a green suite and five chambers that rendered handsomely, and I genuinely
-did not know whether the thing could be won. Screenshots could not tell me, and
-neither could unit tests: every rule was individually correct, and the bug lived
-in their sum — a stun counter decremented twice per cycle, which made the
-Minotaur unbeatable by anyone playing correctly. Writing a bot that plays 300
-whole runs turned an opinion ("feels about right") into a number (3% wins), and
-once there was a number I knew both what to fix and when to stop.
+**The breakthrough** was not being satisfied with the first version, and then
+working out how to say why.
 
-The second thing that moved the work was the exact opposite: sitting down and
-playing the opening chamber myself, and losing a heart every single time. No
-amount of measurement would have found that. The game was working precisely as
-written.
+The first build of *Labyrinth* was finished by every measure I had: tests green,
+deployed, playable start to finish. It still was not good. I could not tell a
+landed hit from an ignored keypress, the red tiles did not reliably mean
+anything, and the emoji artwork left the Greek theme decorative. None of it was
+a bug, so none of my checks could see it.
 
-**What it changed** is that I had been treating a green suite as the thing that
-tells me the work is finished, and this week it was wrong twice over — once
-because passing tests hid an unwinnable game, once because a wrong colour was
-invisible to any assertion I could write. I would rather be the sort of
-developer who asks what class of question each instrument can actually answer,
-and then goes and buys the instrument for the rest: a bot for *does this
-compose*, my own hands for *is this fair*, my eyes for *does it look like
-anything*. Tests are backpressure while I work. They were never the verification
-I was treating them as.
+What moved the work was writing that down as a diagnosis rather than a
+complaint. Not "make it better", but one named failure and one specified rule at
+a time: a red tile always means *that exact tile will be attacked after your
+next valid move*, and the first enemy has one hit point so the first bump
+teaches the whole combat system. I was as explicit about what not to do — no
+RPG, keep the five chambers, keep a run under five minutes — because the easiest
+way to lose a working prototype is to let an agent grow it.
+
+**What it changed about who I want to be** is that I no longer think the code is
+my contribution. An agent writes it, and this week it wrote something that
+passed every check I had and was still not worth showing anyone. What is left
+for me is harder to see: deciding the thing is not good enough, and being able
+to say why precisely enough to act on. I want to be the developer who holds the
+standard rather than the one who types — who plays the build, takes the
+discomfort seriously, and turns it into a specification. And who keeps the two
+things that cannot be handed off: the judgement about whether the work is good,
+and the account of how it was made.

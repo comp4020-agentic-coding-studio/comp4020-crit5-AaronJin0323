@@ -94,6 +94,9 @@ so the old lint-specific notes were dropped along with it.)
   there, not enough to see what it is. Screenshot the *element* with
   `deviceScaleFactor: 4` (and `reducedMotion: "reduce"`, or an opacity
   animation captures mid-fade) when the detail is the thing being checked.
+  **And budget several rounds, not one:** each correction changes what the
+  silhouette reads as next, so a small figure typically takes three or four
+  look-fix cycles before it stops reading as the wrong object.
 - **`visibility: hidden` takes an element out of hit-testing**, so a harness
   that hides the page before capturing it can't also click a control hidden
   that way. Interact first, then hide, then capture --- and hash output files
@@ -121,6 +124,37 @@ so the old lint-specific notes were dropped along with it.)
 - **A regression test written after the fix has never been seen to fail.**
   Reintroduce the bug, watch it go red, then restore. Otherwise you have
   shipped a test that asserts something true for reasons you haven't checked.
+- **`toContain` on a string is a substring check, and it makes a regression
+  test toothless.** Asserting that a stylesheet "contains" a keyframe name
+  passes on a bare mention of it in a comment, or in an unrelated selector.
+  Assert the *shape* you actually care about ---
+  `new RegExp('@keyframes\\s+name\\s*\\{')` --- and prove it fails both ways.
+- **Two single-class CSS rules have equal specificity, so the later one wins
+  silently.** A `.fig` sizing rule written for one context, six hundred lines
+  below `.fig-heart`, quietly resized every heart in the HUD. When a class is
+  meant for one context, scope it to that context (`.actor .fig`) rather than
+  relying on where it happens to sit in the file.
+- **A state-modifier class that shares a name with a component inherits the
+  component's layout.** A list item toggled to `.boss` picked up the boss health
+  bar's `position: absolute` and left the page --- the row silently showed four
+  of five. Namespace modifiers (`.is-boss`), and hold it mechanically: every
+  class the code toggles, checked against the bare component selectors in the
+  stylesheet. Same family as the string-agreement test above.
+- **A re-export nothing imports is dead weight, and its comment is often
+  wrong.** Two here claimed to exist for a consumer that imports from somewhere
+  else entirely. Grep the symbol before believing the comment justifying it.
+- **A fix can remove the symptom by adding an exception the user cannot see.**
+  Cancelling an enemy's telegraph when you wound it stopped the unfair damage
+  and quietly broke the one rule the design rested on --- the red tile no longer
+  reliably predicted anything. Ask of any rule change: *can the person using
+  this read it off the screen?* If not, fix the composition instead of the rule.
+
+## Shell
+
+- **zsh does not word-split unquoted parameter expansions.** `set -- $CFG` and
+  `for x in $LIST` silently see one word, so a sweep written the bash way runs
+  once with a corrupted argument instead of failing. Use a zsh array
+  (`arr=(${=CFG})`) or drive the loop from `python3`/a heredoc.
 
 ## Working style
 
