@@ -1,208 +1,338 @@
-/* Ancient sandstone lit from a long way off: near-black navy ground, bronze
-   edges, and only two colours that ever mean anything --- red is about to
-   hurt you, blue-white is a god. Everything else is architecture. */
+/* Black-figure pottery, at night. Everything on screen is drawn from five
+   pigments and one grid; there are no images and no fonts to fetch.
+
+   The rules the palette enforces:
+     - red is only ever danger. Nothing decorative is red.
+     - gold is only ever "this is for you": your blade, the open gate, a gift.
+     - ivory is Theseus and bone; terracotta and oxblood are what wants him dead.
+*/
 
 :root {
-  --void: #080b14;
-  --deep: #0d1222;
-  --floor: #1b2440;
-  --floor-lit: #222d4f;
-  --stone: #0b0e1a;
-  --sand: #e0cfa6;
-  --bronze: #b8862c;
-  --gold: #f3cd6b;
-  --blood: #c0374f;
-  --divine: #cfe9ff;
-  --bone: #e8e2d0;
+  --ink: #080b14;
+  --night: #0c111f;
+  --navy: #141d33;
+  --floor: #1a2540;
+  --floor-lit: #21304f;
+  --stone: #070a12;
 
-  /* Held once so the board can subtract it and never overflow the first
-     screen --- the bar's height and the board's height are the same sum. */
-  --nav-h: 3.25rem;
-  --stage: min(92vw, calc(100svh - var(--nav-h) - 5rem), 540px);
-  --cell: calc(100% / 9);
+  --ivory: #ece2cc;
+  --terracotta: #c46b3c;
+  --oxblood: #8e2f36;
+  --gold: #d8a94c;
+  --gold-lit: #f5d489;
+  --divine: #cfe4ff;
+  --warn: #e0433d;
 
-  --meander: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44'%3E%3Cpath d='M2 34h10V12h20v20H22V22' fill='none' stroke='%23b8862c' stroke-width='2'/%3E%3C/svg%3E");
+  --nav-h: 3.9rem;
+  --stage: min(94vw, calc(100svh - var(--nav-h) - 2.2rem), 640px);
+  --grid: 9;
+  --cell: calc(100% / var(--grid));
+
+  /* A Greek key, drawn once and tiled. The only "texture" in the build. */
+  --meander: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cpath fill='none' stroke='%23d8a94c' stroke-width='2.5' d='M6 42V12h30v24H18V20h12'/%3E%3C/svg%3E");
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
 }
 
 body {
   margin: 0;
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  background: var(--void);
-  color: var(--sand);
-  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   overflow: hidden;
+  background: radial-gradient(120% 90% at 50% 8%, var(--navy), var(--ink) 68%);
+  color: var(--ivory);
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   -webkit-font-smoothing: antialiased;
 }
 
-/* The labyrinth itself, wound faintly behind everything. */
+/* The key, very faint, behind everything. */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   background-image: var(--meander);
-  opacity: 0.045;
+  opacity: 0.04;
   pointer-events: none;
 }
 
-.sr {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-/* --- the bar ---------------------------------------------------------- */
+/* ------------------------------------------------------------------ HUD -- */
 
 .hud {
-  height: var(--nav-h);
-  width: min(100%, 620px);
-  padding: 0 1rem;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
   position: relative;
   z-index: 2;
+  height: var(--nav-h);
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+  padding: 0 clamp(0.7rem, 3vw, 1.6rem);
+  border-bottom: 1px solid color-mix(in srgb, var(--gold) 22%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--navy) 80%, transparent), transparent);
 }
 
-.hud h1 {
+.crest {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
   margin: 0;
-  font-size: 0.95rem;
+  font-size: clamp(0.78rem, 2.4vw, 1rem);
   font-weight: 600;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
+  letter-spacing: 0.34em;
   color: var(--gold);
-  line-height: 1.1;
 }
 
-.hud h1 span {
-  display: block;
-  font-size: 0.55rem;
-  letter-spacing: 0.16em;
-  color: var(--bronze);
-  opacity: 0.85;
+.crest-mark {
+  width: 1.15rem;
+  height: 1.15rem;
+  background-image: var(--meander);
+  background-size: contain;
+  opacity: 0.9;
 }
 
+.crest-word {
+  opacity: 0.92;
+}
+
+@media (width < 30rem) {
+  .crest-word {
+    display: none;
+  }
+}
+
+.vitals {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-inline-start: auto;
+}
+
+/* Hearts --- big enough to count without looking twice. */
 .hearts {
   display: flex;
   gap: 0.3rem;
-  margin-left: auto;
 }
 
-.heart {
-  width: 0.9rem;
-  height: 0.9rem;
-  background: var(--blood);
-  clip-path: polygon(50% 100%, 0 38%, 12% 8%, 50% 26%, 88% 8%, 100% 38%);
+.fig-heart {
+  width: 1.55rem;
+  height: 1.55rem;
+  fill: var(--oxblood);
+  stroke: var(--ivory);
+  stroke-width: 1.6;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--oxblood) 60%, transparent));
   transition:
-    opacity 220ms,
-    transform 220ms;
+    fill 0.25s,
+    opacity 0.25s,
+    transform 0.25s;
 }
 
-.heart.spent {
-  opacity: 0.16;
-  transform: scale(0.72);
-  background: var(--stone);
+.fig-heart.spent {
+  fill: transparent;
+  stroke: color-mix(in srgb, var(--ivory) 32%, transparent);
+  opacity: 0.5;
+  transform: scale(0.84);
+  filter: none;
 }
 
+/* Gifts taken, and whether each is ready right now. */
+.gifts {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.gift-chip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.22rem 0.34rem;
+  border: 1px solid color-mix(in srgb, var(--gold) 26%, transparent);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--ink) 60%, transparent);
+  transition:
+    border-color 0.25s,
+    box-shadow 0.25s;
+}
+
+.gift-chip .fig-gift {
+  width: 1.25rem;
+  height: 1.25rem;
+  opacity: 0.55;
+  transition: opacity 0.25s;
+}
+
+.gift-chip.ready {
+  border-color: var(--gold-lit);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--gold) 45%, transparent);
+}
+
+.gift-chip.ready .fig-gift {
+  opacity: 1;
+}
+
+.gift-chip.spent {
+  opacity: 0.4;
+}
+
+/* Hermes: four marks, filling. */
+.steps {
+  display: flex;
+  gap: 2px;
+}
+
+.steps i {
+  width: 4px;
+  height: 10px;
+  border: 1px solid color-mix(in srgb, var(--gold) 40%, transparent);
+  background: transparent;
+  transition: background 0.2s;
+}
+
+.steps i.lit {
+  background: var(--gold-lit);
+}
+
+/* Chambers --- filled is solid gold, unfilled is an empty outline. */
 .chambers {
   display: flex;
-  gap: 0.28rem;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.pip {
-  width: 0.42rem;
-  height: 0.42rem;
-  border: 1px solid var(--bronze);
+.chambers li {
+  width: 0.85rem;
+  height: 0.85rem;
+  border: 2px solid color-mix(in srgb, var(--gold) 45%, transparent);
   transform: rotate(45deg);
-  opacity: 0.5;
+  transition:
+    background 0.3s,
+    box-shadow 0.3s,
+    border-color 0.3s;
 }
 
-.pip.done {
+.chambers li.done {
   background: var(--gold);
-  opacity: 1;
+  border-color: var(--gold-lit);
 }
 
-.pip.here {
-  background: var(--sand);
-  opacity: 1;
-  box-shadow: 0 0 8px var(--gold);
+.chambers li.here {
+  border-color: var(--gold-lit);
+  box-shadow: 0 0 9px color-mix(in srgb, var(--gold) 70%, transparent);
 }
 
+/* The fifth marker is the lair, and it is deliberately not called `.boss`:
+   the boss health bar already owns that class, and it is absolutely
+   positioned --- a pip sharing the name gets yanked out of the row. */
+.chambers li.lair {
+  border-radius: 50%;
+  border-color: color-mix(in srgb, var(--oxblood) 80%, var(--gold));
+}
+
+.chambers li.lair.done {
+  background: var(--oxblood);
+}
+
+/* Sound --- a real target, not a glyph. */
 .mute {
-  background: none;
-  border: 1px solid transparent;
-  color: var(--bronze);
-  font-size: 0.9rem;
-  cursor: pointer;
-  padding: 0.2rem 0.4rem;
-  border-radius: 4px;
-}
-
-.mute:hover {
-  color: var(--gold);
-}
-
-.mute[aria-pressed="true"] {
-  opacity: 0.35;
-  text-decoration: line-through;
-}
-
-/* --- the board -------------------------------------------------------- */
-
-main {
-  /* Takes the whole screen under the bar so the board sits in the middle of
-     it, rather than hanging off the bar with a dead third underneath. */
-  flex: 1;
-  width: 100%;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
+  gap: 0.4rem;
+  min-height: 2.5rem;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--gold) 32%, transparent);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--gold);
+  font: inherit;
+  font-size: 0.62rem;
+  letter-spacing: 0.22em;
+  cursor: pointer;
+  transition:
+    border-color 0.2s,
+    color 0.2s;
+}
+
+.mute:hover,
+.mute:focus-visible {
+  border-color: var(--gold-lit);
+  color: var(--gold-lit);
+  outline: none;
+}
+
+.fig-lyre {
+  width: 1.35rem;
+  height: 1.35rem;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.fig-lyre .lyre-strings {
+  stroke-width: 1.3;
+}
+
+.fig-lyre .lyre-cut {
+  stroke: var(--oxblood);
+  stroke-width: 2.6;
+  opacity: 0;
+}
+
+.mute.off {
+  color: color-mix(in srgb, var(--ivory) 45%, transparent);
+  border-color: color-mix(in srgb, var(--ivory) 18%, transparent);
+}
+
+.mute.off .fig-lyre .lyre-cut {
+  opacity: 1;
+}
+
+@media (width < 34rem) {
+  .mute-label {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------- board -- */
+
+.hall {
+  position: relative;
+  height: calc(100svh - var(--nav-h));
+  display: grid;
+  place-items: center;
+  padding: 0.6rem;
 }
 
 .stage {
   position: relative;
   width: var(--stage);
-  aspect-ratio: 1;
-  border: 2px solid var(--bronze);
-  outline: 6px solid var(--deep);
+  height: var(--stage);
+  border: 1px solid color-mix(in srgb, var(--gold) 30%, transparent);
   box-shadow:
-    0 0 0 7px rgb(184 134 44 / 0.25),
-    0 24px 60px rgb(0 0 0 / 0.7);
-  background: var(--deep);
+    0 0 0 6px var(--ink),
+    0 0 0 7px color-mix(in srgb, var(--gold) 18%, transparent),
+    0 24px 60px rgb(0 0 0 / 60%);
+  transition: filter 0.09s steps(1), transform 0.09s steps(1);
 }
 
-.stage.jolt {
-  animation: jolt 220ms ease-out;
-}
-
-@keyframes jolt {
-  25% {
-    transform: translate(4px, -3px);
-  }
-  50% {
-    transform: translate(-5px, 2px);
-  }
-  75% {
-    transform: translate(3px, 3px);
-  }
+.stage.hitstop {
+  filter: brightness(1.5) saturate(0.6);
+  transform: scale(1.012);
 }
 
 .board {
   position: absolute;
   inset: 0;
   display: grid;
-  grid-template-columns: repeat(9, 1fr);
+  grid-template-columns: repeat(var(--grid), 1fr);
+  background: var(--stone);
 }
 
 .tile {
@@ -210,338 +340,790 @@ main {
 }
 
 .tile.floor {
-  background: var(--floor);
-  box-shadow: inset 0 0 0 1px rgb(224 207 166 / 0.05);
-}
-
-/* A faint checker, so the grid reads as tiles you step between rather than
-   open ground you slide across. */
-.tile.floor.alt {
-  background: var(--floor-lit);
+  background:
+    radial-gradient(120% 120% at 30% 20%, var(--floor-lit), var(--floor) 70%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 55%, transparent);
 }
 
 .tile.wall {
   background: var(--stone);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--navy) 70%, transparent);
+}
+
+/* Carved masonry, so a wall reads as built rather than as absence. */
+.tile.wall::after {
+  content: "";
+  position: absolute;
+  inset: 18%;
+  border: 1px solid color-mix(in srgb, var(--gold) 8%, transparent);
+}
+
+/* The way out. Barred and dim, then lit and open. */
+.tile.gate {
+  background: linear-gradient(180deg, var(--stone), color-mix(in srgb, var(--gold) 12%, var(--floor)));
+}
+
+.tile.gate::after {
+  content: "";
+  position: absolute;
+  inset: 8% 14%;
+  border: 2px solid color-mix(in srgb, var(--gold) 40%, transparent);
+  border-bottom: none;
+  border-radius: 44% 44% 0 0;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--gold) 34%, transparent) 0 2px,
+      transparent 2px 25%
+    );
+  transition:
+    background 0.45s,
+    border-color 0.45s,
+    box-shadow 0.45s;
+}
+
+.tile.gate.open {
+  background: linear-gradient(180deg, var(--gold-lit), color-mix(in srgb, var(--gold) 50%, var(--floor)));
+}
+
+.tile.gate.open::after {
+  border-color: var(--gold-lit);
+  background: none;
   box-shadow:
-    inset 0 0 0 1px rgb(0 0 0 / 0.55),
-    inset 0 2px 0 rgb(224 207 166 / 0.05),
-    inset 0 -3px 6px rgb(0 0 0 / 0.45);
+    0 0 22px var(--gold),
+    inset 0 0 18px var(--gold-lit);
 }
 
-.tile.exit {
-  background: #0b0f1c;
-  box-shadow: inset 0 0 0 2px rgb(184 134 44 / 0.45);
-}
-
-/* Shut, and visibly so: three bars across the dark. */
-.tile.exit::after {
+/* The one red on the board. It means exactly one thing: this tile is struck
+   after your next move. It never moves once it is drawn. */
+.tile.marked::before {
   content: "";
   position: absolute;
-  inset: 22% 18%;
-  background: repeating-linear-gradient(
-    90deg,
-    var(--bronze) 0 2px,
-    transparent 2px 33%
-  );
-  opacity: 0.7;
-  transition: opacity 300ms;
+  inset: 0;
+  background:
+    repeating-linear-gradient(
+      45deg,
+      color-mix(in srgb, var(--warn) 46%, transparent) 0 4px,
+      transparent 4px 9px
+    );
+  box-shadow:
+    inset 0 0 0 2px var(--warn),
+    inset 0 0 16px color-mix(in srgb, var(--warn) 55%, transparent);
+  animation: menace 0.7s ease-in-out infinite alternate;
 }
 
-.tile.exit.open {
-  background: radial-gradient(circle at 50% 60%, var(--gold), #7a5410 70%);
-  animation: doorway 2.2s ease-in-out infinite;
-}
-
-.tile.exit.open::after {
-  opacity: 0;
-}
-
-@keyframes doorway {
-  50% {
-    box-shadow: 0 0 26px 6px rgb(243 205 107 / 0.55);
-  }
-}
-
-/* Red means a blow lands here on the next beat. It is the only red on screen. */
-.tile.danger::before {
-  content: "";
-  position: absolute;
-  inset: 8%;
-  border: 2px solid var(--blood);
-  background: rgb(192 55 79 / 0.22);
-  animation: peril 620ms ease-in-out infinite alternate;
-}
-
-@keyframes peril {
+@keyframes menace {
   from {
-    opacity: 0.45;
+    opacity: 0.62;
   }
   to {
     opacity: 1;
-    background: rgb(192 55 79 / 0.34);
   }
 }
 
-/* --- who is standing where ------------------------------------------- */
+/* ------------------------------------------------- Ariadne's thread ------ */
 
-.actors {
+.thread {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
 
-.actor {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: var(--cell);
-  height: var(--cell);
-  display: grid;
-  place-items: center;
-  transform: translate(calc(var(--x) * 100%), calc(var(--y) * 100%));
-  transition: transform 120ms cubic-bezier(0.3, 1.4, 0.5, 1);
+.thread-line {
+  fill: none;
+  stroke: color-mix(in srgb, var(--oxblood) 70%, var(--terracotta));
+  stroke-width: 0.055;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  opacity: 0.55;
+  filter: drop-shadow(0 0 0.03px var(--terracotta));
 }
 
-.actor svg {
-  width: 78%;
-  height: 78%;
+.stage.daylight .thread-line {
+  stroke: var(--gold-lit);
+  opacity: 1;
+  stroke-width: 0.09;
+  animation: thread-lit 1.4s ease-out;
+}
+
+@keyframes thread-lit {
+  from {
+    stroke: var(--oxblood);
+    opacity: 0.4;
+  }
+}
+
+/* --------------------------------------------------------------- actors -- */
+
+/* Position lives on the actor, size lives here too, and every animation gets
+   `transform` to itself on the child SVG. Scaling a positioned element with
+   the same transform makes its size decide where it lands. */
+.actor,
+.fx {
+  position: absolute;
+  left: calc(var(--x, 0) * 100% / var(--grid));
+  top: calc(var(--y, 0) * 100% / var(--grid));
+  width: var(--cell);
+  height: var(--cell);
+  pointer-events: none;
+}
+
+.actors {
+  position: absolute;
+  inset: 0;
+}
+
+.actor {
+  display: grid;
+  place-items: center;
+  transition:
+    left 0.13s ease-out,
+    top 0.13s ease-out;
+}
+
+/* Board figures fill their tile. Scoped to .actor on purpose: `.fig` and
+   `.fig-heart` have the same specificity, so an unscoped rule down here would
+   silently beat the sizes set on the HUD's figures further up the file. */
+.actor .fig {
+  width: 88%;
+  height: 88%;
+}
+
+.fig {
   overflow: visible;
 }
 
-.actor.hero svg {
-  filter: drop-shadow(0 0 7px rgb(243 205 107 / 0.5));
+.fig .ink {
+  fill: #06090f;
+}
+.fig .ivory {
+  fill: var(--ivory);
+}
+.fig .terracotta {
+  fill: var(--terracotta);
+}
+.fig .oxblood {
+  fill: var(--oxblood);
+}
+.fig .gold {
+  fill: var(--gold);
+}
+.fig .stroke-ivory {
+  fill: none;
+  stroke: var(--ivory);
+  stroke-width: 1.5;
+  stroke-linecap: round;
 }
 
-.actor.minotaur svg {
-  width: 96%;
-  height: 96%;
+/* Two poses per figure, one shown at a time. */
+.fig .coil {
+  display: none;
 }
 
-.actor.stunned {
-  animation: reel 700ms ease-in-out infinite;
+.actor.windup .fig .calm,
+.actor.stunned .fig .calm {
+  display: none;
 }
 
-.actor.stunned svg {
-  filter: drop-shadow(0 0 10px var(--divine));
+.actor.windup .fig .coil,
+.actor.stunned .fig .coil {
+  display: block;
+}
+
+.hero .fig {
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--gold) 40%, transparent));
+}
+
+.foe .fig {
+  filter: drop-shadow(0 2px 5px rgb(0 0 0 / 70%));
+  transition: filter 0.3s;
+}
+
+.foe-minotaur .fig {
+  width: 104%;
+  height: 104%;
+}
+
+/* Wounded but standing: colour drains out of it. */
+.foe.hurt .fig {
+  filter: saturate(0.42) brightness(0.82) drop-shadow(0 2px 5px rgb(0 0 0 / 70%));
+}
+
+/* Wound up. It leans in, and the red tile says where. */
+.foe.windup .fig {
+  animation: coil 0.55s ease-in-out infinite alternate;
+  filter: drop-shadow(0 0 9px color-mix(in srgb, var(--warn) 65%, transparent));
+}
+
+@keyframes coil {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.13) translateY(-3%);
+  }
+}
+
+/* Crashed. Sagging, and the only moment it can be cut. */
+.foe.stunned .fig {
+  animation: reel 0.9s ease-in-out infinite alternate;
+  filter: saturate(0.4) drop-shadow(0 0 12px color-mix(in srgb, var(--divine) 55%, transparent));
 }
 
 @keyframes reel {
-  50% {
-    transform: translate(calc(var(--x) * 100%), calc(var(--y) * 100% - 6%))
-      rotate(7deg);
+  from {
+    transform: rotate(-7deg) translateY(6%);
+  }
+  to {
+    transform: rotate(6deg) translateY(9%);
   }
 }
 
-.actor.struck {
-  animation: struck 220ms ease-out;
+/* Health, under the feet. Reads without being counted. */
+/* Tally marks under the foe's feet. Sized off the board rather than in fixed
+   pixels: at 5px they were legible in a 4x element capture and invisible in
+   the actual game. */
+.pips {
+  position: absolute;
+  bottom: -2%;
+  display: flex;
+  gap: calc(var(--stage) / 180);
 }
 
-@keyframes struck {
+.pips i {
+  width: calc(var(--stage) / 84);
+  height: calc(var(--stage) / 48);
+  border: 1px solid color-mix(in srgb, var(--ink) 70%, transparent);
+  background: var(--terracotta);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--ink) 80%, transparent);
+  transition:
+    background 0.2s,
+    opacity 0.2s;
+}
+
+.pips i.spent {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--ivory) 45%, transparent);
+  box-shadow: none;
+  opacity: 0.7;
+}
+
+/* One health point left in the whole enemy: no pips, no ambiguity. */
+.foe .pips:has(i:only-child) {
+  display: none;
+}
+
+/* Struck. Squashed sideways and thrown back a little. */
+.foe.struck .fig {
+  animation: recoil 0.3s ease-out;
+}
+
+@keyframes recoil {
   0% {
-    filter: brightness(6) saturate(0);
+    transform: scale(1.4, 0.65);
+    filter: brightness(4) saturate(0);
   }
-  40% {
-    transform: translate(calc(var(--x) * 100% + 9%), calc(var(--y) * 100%));
+  45% {
+    transform: scale(0.86, 1.16) translateY(-8%);
   }
-  70% {
-    transform: translate(calc(var(--x) * 100% - 7%), calc(var(--y) * 100%));
+  100% {
+    transform: none;
   }
 }
 
-.actor.dying {
-  animation: dying 260ms ease-in forwards;
+.foe.gone {
+  animation: crumble 0.3s ease-in forwards;
 }
 
-@keyframes dying {
+@keyframes crumble {
   to {
     opacity: 0;
-    transform: translate(calc(var(--x) * 100%), calc(var(--y) * 100%)) scale(0.2)
-      rotate(120deg);
+    transform: scale(0.4) rotate(22deg);
   }
 }
 
-.actor.wounded {
-  animation: wounded 320ms ease-out;
+.hero.lunge .fig {
+  animation: lunge 0.26s ease-out;
+}
+
+@keyframes lunge {
+  40% {
+    transform: scale(1.2, 0.88);
+  }
+}
+
+.hero.winged .fig {
+  animation: winged 0.32s ease-out;
+}
+
+@keyframes winged {
+  0% {
+    transform: translateY(-22%) scale(0.9, 1.14);
+  }
+}
+
+.hero.rebuff .fig {
+  animation: rebuff 0.3s ease-out;
+}
+
+@keyframes rebuff {
+  30% {
+    transform: translateX(-14%) rotate(-8deg);
+  }
+}
+
+.hero.wounded .fig {
+  animation: wounded 0.48s ease-out;
+  filter: drop-shadow(0 0 14px var(--warn));
 }
 
 @keyframes wounded {
   0%,
   100% {
-    filter: none;
+    transform: none;
+  }
+  20% {
+    transform: translateX(-12%) rotate(-10deg);
+  }
+  60% {
+    transform: translateX(9%) rotate(7deg);
+  }
+}
+
+/* Ares banked. The blade itself lights up. */
+.hero.sharp .fig .gold {
+  fill: var(--gold-lit);
+  filter: drop-shadow(0 0 6px var(--gold-lit));
+}
+
+/* Athena, unspent. */
+.hero.warded::before {
+  content: "";
+  position: absolute;
+  inset: 4%;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--divine) 70%, transparent);
+  box-shadow:
+    0 0 14px color-mix(in srgb, var(--divine) 55%, transparent),
+    inset 0 0 12px color-mix(in srgb, var(--divine) 35%, transparent);
+  animation: halo 2s ease-in-out infinite alternate;
+}
+
+@keyframes halo {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 0.95;
+  }
+}
+
+.hero.warded-flash::before {
+  animation: none;
+  opacity: 1;
+  border-color: var(--divine);
+  box-shadow: 0 0 34px var(--divine);
+}
+
+/* ------------------------------------------------------------------ fx -- */
+
+.fx {
+  z-index: 3;
+}
+
+.spark {
+  border-radius: 50%;
+  animation: spark 0.36s ease-out forwards;
+  background: radial-gradient(circle, var(--gold-lit), transparent 62%);
+}
+
+.spark.tone-bone {
+  background: radial-gradient(circle, #fff, var(--ivory) 30%, transparent 66%);
+}
+.spark.tone-blood {
+  background: radial-gradient(circle, #fff, var(--warn) 34%, transparent 68%);
+}
+.spark.tone-stone {
+  background: radial-gradient(circle, var(--ivory), transparent 52%);
+}
+.spark.tone-divine {
+  background: radial-gradient(circle, #fff, var(--divine) 40%, transparent 72%);
+}
+
+@keyframes spark {
+  0% {
+    transform: scale(0.3);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+/* Theseus' sword arc, thrown into the tile he struck. */
+.arc {
+  transform: rotate(calc(var(--turn, 0) * 1turn));
+  animation: arc 0.32s ease-out forwards;
+}
+
+.arc::after {
+  content: "";
+  position: absolute;
+  inset: -12%;
+  border: 4px solid transparent;
+  border-top-color: var(--gold-lit);
+  border-right-color: var(--gold-lit);
+  border-radius: 50%;
+  filter: drop-shadow(0 0 8px var(--gold));
+}
+
+@keyframes arc {
+  0% {
+    opacity: 0;
+    scale: 0.55;
+    rotate: -60deg;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    scale: 1.35;
+    rotate: 55deg;
+  }
+}
+
+/* A resolved mark. Same geometry as the tiles it warned about. */
+.lash {
+  z-index: 2;
+}
+
+.lash.across {
+  width: calc(var(--cell) * var(--len, 1));
+}
+
+.lash.down {
+  height: calc(var(--cell) * var(--len, 1));
+}
+
+.lash::after {
+  content: "";
+  position: absolute;
+  inset: 22% 0;
+  background: linear-gradient(90deg, transparent, var(--warn), transparent);
+  filter: blur(1px) drop-shadow(0 0 10px var(--warn));
+  animation: lash 0.4s ease-out forwards;
+}
+
+.lash.down::after {
+  inset: 0 22%;
+  background: linear-gradient(180deg, transparent, var(--warn), transparent);
+}
+
+@keyframes lash {
+  0% {
+    opacity: 0;
+    transform: scale(0.55);
   }
   30% {
-    filter: drop-shadow(0 0 14px var(--blood)) brightness(2.4);
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
   }
 }
 
-.actor.warded svg {
-  animation: warded 500ms ease-out;
+/* A single-tile slash keeps the blade shape instead of the bar. */
+.lash-slash::after {
+  inset: 12%;
+  background: none;
+  border: 3px solid transparent;
+  border-top-color: var(--warn);
+  border-left-color: var(--warn);
+  border-radius: 50%;
+  transform: rotate(calc(var(--turn, 0) * 1turn));
+  animation: slash 0.38s ease-out forwards;
 }
 
-@keyframes warded {
+@keyframes slash {
   0% {
-    filter: drop-shadow(0 0 22px var(--divine)) brightness(3);
+    opacity: 0;
+    scale: 0.5;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    scale: 1.5;
   }
 }
 
-/* --- the opening chevron --------------------------------------------- */
+/* The Minotaur's dust. Heavier and slower than the rest. */
+.lash-charge::after {
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--oxblood) 85%, var(--warn)), transparent);
+  inset: 8% 0;
+  animation-duration: 0.5s;
+}
+
+.lash-charge.down::after {
+  inset: 0 8%;
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--oxblood) 85%, var(--warn)), transparent);
+}
+
+.stage.jolt {
+  animation: jolt 0.42s ease-out;
+}
+
+.stage.shudder {
+  animation: shudder 0.42s ease-out;
+}
+
+@keyframes jolt {
+  0%,
+  100% {
+    transform: none;
+  }
+  15% {
+    transform: translate(-9px, 5px);
+  }
+  35% {
+    transform: translate(7px, -4px);
+  }
+  60% {
+    transform: translate(-4px, 2px);
+  }
+}
+
+@keyframes shudder {
+  0%,
+  100% {
+    transform: none;
+  }
+  20% {
+    transform: scale(1.02);
+  }
+  50% {
+    transform: scale(0.99) translateY(3px);
+  }
+}
+
+/* ---------------------------------------------------- the opening nudge -- */
 
 .hint {
   position: absolute;
-  top: 0;
-  left: 0;
+  left: calc(var(--x, 0) * 100% / var(--grid));
+  top: calc(var(--y, 0) * 100% / var(--grid));
   width: var(--cell);
   height: var(--cell);
   display: grid;
   place-items: center;
-  transform: translate(calc(var(--x) * 100%), calc(var(--y) * 100%));
-  color: var(--gold);
-  font-size: clamp(1rem, 4vw, 1.6rem);
-  line-height: 1;
+  z-index: 4;
   pointer-events: none;
-  animation: beckon 1.5s ease-in-out infinite;
-  transition: opacity 400ms;
 }
 
-.hint.spent {
-  opacity: 0;
+.hint svg {
+  width: 52%;
+  fill: var(--gold-lit);
+  filter: drop-shadow(0 0 10px var(--gold));
+  animation: beckon 1.15s ease-in-out infinite;
+}
+
+.hint[hidden] {
+  display: none;
 }
 
 @keyframes beckon {
   0%,
   100% {
-    opacity: 0.25;
-    transform: translate(calc(var(--x) * 100%), calc(var(--y) * 100% + 14%));
+    transform: translateY(28%);
+    opacity: 0.35;
   }
   50% {
+    transform: translateY(-14%);
     opacity: 1;
-    transform: translate(calc(var(--x) * 100%), calc(var(--y) * 100% - 12%));
   }
 }
 
-/* --- the Minotaur's health ------------------------------------------- */
+/* ------------------------------------------------------------ boss bar -- */
 
 .boss {
-  width: var(--stage);
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 1.5%;
+  z-index: 4;
+  display: grid;
+  gap: 3px;
+  pointer-events: none;
+}
+
+.boss[hidden] {
+  display: none;
+}
+
+.boss-name {
+  font-size: clamp(0.5rem, 1.7vw, 0.62rem);
+  letter-spacing: 0.3em;
+  color: var(--gold);
+  text-align: center;
 }
 
 .boss-bar {
-  height: 10px;
-  background: rgb(0 0 0 / 0.55);
-  border: 1px solid rgb(184 134 44 / 0.55);
+  height: 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--gold) 55%, transparent);
+  background: color-mix(in srgb, var(--ink) 80%, transparent);
 }
 
 .boss-bar i {
   display: block;
   height: 100%;
-  width: 100%;
-  background: linear-gradient(90deg, #8e2436, #e2536b);
-  box-shadow: 0 0 14px rgb(192 55 79 / 0.55);
-  transition: width 260ms ease-out;
+  width: calc(var(--share, 1) * 100%);
+  background: linear-gradient(90deg, var(--oxblood), var(--terracotta));
+  transition: width 0.35s ease-out;
 }
 
-/* --- gods, and endings ------------------------------------------------ */
+/* Stunned: the bar says "now" as loudly as the sprite does. */
+.boss.open .boss-bar {
+  border-color: var(--divine);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--divine) 65%, transparent);
+}
+
+.boss.open .boss-name {
+  color: var(--divine);
+}
+
+/* ------------------------------------------------------------ overlays -- */
 
 .overlay {
-  position: fixed;
+  position: absolute;
   inset: 0;
-  z-index: 5;
+  z-index: 6;
   display: grid;
   place-content: center;
-  gap: 1.5rem;
-  padding: 1.5rem;
-  background: rgb(6 9 17 / 0.9);
+  gap: 1.1rem;
+  padding: 1.2rem;
+  background: color-mix(in srgb, var(--ink) 88%, transparent);
   backdrop-filter: blur(3px);
-  animation: rise 260ms ease-out;
+  animation: fade 0.3s ease-out;
 }
 
 .overlay[hidden] {
   display: none;
 }
 
-@keyframes rise {
+@keyframes fade {
   from {
     opacity: 0;
   }
 }
 
+.gift-eyebrow {
+  margin: 0;
+  text-align: center;
+  font-size: 0.62rem;
+  letter-spacing: 0.5em;
+  color: var(--gold);
+  opacity: 0.7;
+}
+
 .gods {
   display: flex;
-  gap: 1.25rem;
   flex-wrap: wrap;
   justify-content: center;
+  gap: 0.7rem;
 }
 
 .god {
-  width: min(38vw, 200px);
-  padding: 1.75rem 1rem;
   display: grid;
-  gap: 0.6rem;
-  place-items: center;
-  text-align: center;
-  background: linear-gradient(180deg, #131a2e, #0a0e1a);
-  border: 1px solid var(--bronze);
-  color: var(--sand);
+  justify-items: center;
+  gap: 0.3rem;
+  width: min(9.5rem, 30vw);
+  padding: 0.9rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--gold) 34%, transparent);
+  border-radius: 2px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--navy) 80%, transparent), transparent);
+  color: var(--ivory);
   font: inherit;
   cursor: pointer;
   transition:
-    transform 160ms,
-    box-shadow 160ms,
-    border-color 160ms;
+    border-color 0.2s,
+    transform 0.2s,
+    box-shadow 0.2s,
+    background 0.2s;
 }
 
-.god:hover,
-.god:focus-visible {
-  transform: translateY(-6px);
-  border-color: var(--gold);
-  box-shadow: 0 0 34px rgb(207 233 255 / 0.28);
-  outline: none;
+.god-art .fig-gift {
+  width: 2.6rem;
+  height: 2.6rem;
 }
 
-.god .symbol {
-  font-size: 2.6rem;
-  line-height: 1;
-  filter: drop-shadow(0 0 12px rgb(207 233 255 / 0.5));
-}
-
-.god .name {
-  font-size: 1.05rem;
-  letter-spacing: 0.18em;
+.god-name {
+  font-size: 0.62rem;
+  letter-spacing: 0.3em;
   color: var(--gold);
 }
 
-.god .effect {
-  font-size: 0.8rem;
-  letter-spacing: 0.04em;
-  opacity: 0.78;
-  max-width: 15ch;
+.god-title {
+  font-size: 0.92rem;
+  color: var(--ivory);
+}
+
+.god-effect {
+  font-size: 0.72rem;
+  line-height: 1.4;
+  text-align: center;
+  color: color-mix(in srgb, var(--ivory) 72%, transparent);
+}
+
+.god:hover,
+.god:focus {
+  outline: none;
+  border-color: var(--gold-lit);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--gold) 16%, transparent), transparent);
+  transform: translateY(-4px);
+  box-shadow: 0 0 0 2px var(--gold-lit), 0 10px 30px rgb(0 0 0 / 55%);
+}
+
+/* -------------------------------------------------------------- ending -- */
+
+.end {
+  gap: 1.3rem;
+  justify-items: center;
 }
 
 .verdict {
   margin: 0;
+  font-size: clamp(1.1rem, 5vw, 1.7rem);
+  letter-spacing: 0.28em;
   text-align: center;
-  font-size: clamp(1.15rem, 4.5vw, 1.9rem);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--gold);
+}
+
+.end[data-ended="win"] .verdict {
+  color: var(--gold-lit);
+  text-shadow: 0 0 26px color-mix(in srgb, var(--gold) 70%, transparent);
 }
 
 .end[data-ended="loss"] .verdict {
-  color: var(--blood);
+  color: var(--oxblood);
+  text-shadow: 0 0 22px color-mix(in srgb, var(--oxblood) 60%, transparent);
 }
 
 .tally {
-  margin: 0;
   display: grid;
   grid-template-columns: auto auto;
-  gap: 0.35rem 1.25rem;
-  justify-content: center;
-  font-size: 0.85rem;
-  letter-spacing: 0.06em;
+  gap: 0.3rem 1.1rem;
+  margin: 0;
+  font-size: 0.78rem;
 }
 
 .tally dt {
-  opacity: 0.6;
+  letter-spacing: 0.24em;
+  color: color-mix(in srgb, var(--ivory) 55%, transparent);
+  font-size: 0.62rem;
+  align-self: center;
 }
 
 .tally dd {
@@ -552,33 +1134,69 @@ main {
 
 .favour {
   display: flex;
-  gap: 0.9rem;
+  flex-wrap: wrap;
   justify-content: center;
-  font-size: 1.7rem;
-  min-height: 1.7rem;
+  gap: 0.5rem;
+  min-height: 1rem;
+}
+
+.favour .gift-chip em {
+  font-style: normal;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  padding-inline-end: 0.2rem;
+}
+
+.favour .gift-chip .fig-gift {
+  opacity: 1;
 }
 
 .again {
-  justify-self: center;
-  padding: 0.85rem 2.5rem;
-  background: none;
-  border: 1px solid var(--bronze);
-  color: var(--sand);
+  padding: 0.8rem 2.4rem;
+  border: 1px solid var(--gold);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--gold-lit);
   font: inherit;
   font-size: 0.85rem;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
+  letter-spacing: 0.36em;
   cursor: pointer;
   transition:
-    background 200ms,
-    color 200ms;
+    background 0.2s,
+    box-shadow 0.2s,
+    transform 0.15s;
 }
 
 .again:hover,
-.again:focus-visible {
-  background: var(--gold);
-  color: var(--void);
+.again:focus {
   outline: none;
+  background: color-mix(in srgb, var(--gold) 18%, transparent);
+  box-shadow: 0 0 0 2px var(--gold-lit), 0 0 30px color-mix(in srgb, var(--gold) 45%, transparent);
+  transform: translateY(-2px);
+}
+
+/* Daylight at the mouth of the labyrinth, once it is won. */
+.stage.daylight::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  background: radial-gradient(
+    60% 50% at 50% -8%,
+    color-mix(in srgb, var(--gold-lit) 85%, transparent),
+    transparent 70%
+  );
+  animation: dawn 1.6s ease-out forwards;
+}
+
+@keyframes dawn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -589,37 +1207,14 @@ main {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-}
 
-/* --- impact ----------------------------------------------------------- */
-
-.spark {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: var(--cell);
-  height: var(--cell);
-  transform: translate(calc(var(--x) * 100%), calc(var(--y) * 100%));
-  pointer-events: none;
-  animation: spark 380ms ease-out forwards;
-}
-
-.spark::before {
-  content: "";
-  position: absolute;
-  inset: 18%;
-  border-radius: 50%;
-  background: radial-gradient(circle, var(--tone), transparent 70%);
-}
-
-@keyframes spark {
-  from {
+  /* The one thing that must still be obvious with motion off. */
+  .hint svg {
     opacity: 1;
+    transform: none;
   }
-  to {
-    opacity: 0;
-    /* Position and scale live on different elements elsewhere; here the
-       translate is fixed for the tile, so scaling it is safe. */
-    scale: 2.1;
+
+  .tile.marked::before {
+    opacity: 1;
   }
 }

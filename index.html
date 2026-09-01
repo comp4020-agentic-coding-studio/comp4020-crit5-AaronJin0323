@@ -30,44 +30,76 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <!-- The only landmark on a one-screen game: the run's own status. -->
-    <nav class="hud" aria-label="Run">
-      <h1>Labyrinth<span>Favour of the Gods</span></h1>
-      <div class="hearts" data-hearts aria-live="polite" aria-label="Life"></div>
-      <div class="chambers" data-chambers aria-label="Chambers"></div>
-      <button class="mute" data-mute type="button" aria-pressed="false">
-        <span aria-hidden="true">♪</span><span class="sr">Sound</span>
+    <nav class="hud">
+      <h1 class="crest">
+        <span class="crest-mark" aria-hidden="true"></span>
+        <span class="crest-word">LABYRINTH</span>
+      </h1>
+
+      <div class="vitals">
+        <div class="hearts" data-hearts aria-label="Life"></div>
+        <div class="gifts" data-gifts aria-label="Favour"></div>
+      </div>
+
+      <ol class="chambers" data-chambers aria-label="Chambers"></ol>
+
+      <button class="mute" type="button" data-mute aria-pressed="false">
+        <span class="mute-label">SOUND</span>
+        <svg class="fig fig-lyre" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+          <path class="lyre-arms" d="M8.5 25.5C5 20 4.5 13 7 6.5M23.5 25.5C27 20 27.5 13 25 6.5" />
+          <path class="lyre-yoke" d="M6.4 9.5 25.6 9.5" />
+          <path class="lyre-strings" d="M12 11.4v13M16 10.9v13.6M20 11.4v13" />
+          <path class="lyre-base" d="M7.4 25.4h17.2" />
+          <path class="lyre-cut" d="M4 28 28 4" />
+        </svg>
       </button>
     </nav>
 
-    <main>
+    <main class="hall">
       <div class="stage" data-stage>
         <div class="board" data-board></div>
+
+        <!-- Ariadne's thread. One polyline over every tile Theseus has stood
+             on in this chamber; the renderer rewrites its points each turn. -->
+        <svg
+          class="thread"
+          data-thread
+          viewBox="0 0 9 9"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <polyline class="thread-line" data-thread-line points="" />
+        </svg>
+
         <div class="actors" data-actors></div>
-        <!--
-          The whole opening lesson, and the only thing on screen that asks for
-          anything: a chevron over Theseus, pointing at the open floor and the
-          lit doorway beyond it. It retires itself the moment he first moves.
-        -->
-        <div class="hint" data-start>▲</div>
+
+        <!-- The only thing on the opening screen that moves. It points at the
+             one tile the first press should reach. -->
+        <div class="hint" data-start aria-hidden="true">
+          <svg viewBox="0 0 32 24" focusable="false">
+            <path d="M16 3 30 19h-7L16 11 9 19H2z" />
+          </svg>
+        </div>
+
+        <!-- Sits over the arena's top wall row, so it costs no floor. -->
+        <div class="boss" data-boss hidden>
+          <span class="boss-name">THE MINOTAUR</span>
+          <div class="boss-bar"><i data-boss-fill></i></div>
+        </div>
       </div>
 
-      <!-- Shown only while the Minotaur lives. -->
-      <div class="boss" data-boss hidden>
-        <div class="boss-bar"><i data-boss-fill></i></div>
+      <div class="overlay gift" data-gift hidden>
+        <p class="gift-eyebrow">FAVOUR</p>
+        <div class="gods" data-gods role="group" aria-label="Favour"></div>
+      </div>
+
+      <div class="overlay end" data-ending data-ended="" hidden>
+        <p class="verdict" data-verdict></p>
+        <dl class="tally" data-tally></dl>
+        <div class="favour" data-favour></div>
+        <button class="again" type="button" data-again>AGAIN</button>
       </div>
     </main>
-
-    <div class="overlay gift" data-gift hidden>
-      <div class="gods" data-gods></div>
-    </div>
-
-    <div class="overlay end" data-ending data-ended="" hidden>
-      <p class="verdict" data-verdict></p>
-      <dl class="tally" data-tally></dl>
-      <div class="favour" data-favour></div>
-      <button class="again" data-again type="button">Enter again</button>
-    </div>
 
     <script type="module" src="./main.ts"></script>
   </body>

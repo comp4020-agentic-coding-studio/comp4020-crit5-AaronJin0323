@@ -21,11 +21,25 @@ describe("a game", () => {
 
   it("marks the opening invitation to the first move", () => {
     // "the opening screen invites the first move" --- [data-start] is the
-    // contract: whatever the game turns out to be, something on the opening
-    // screen carries this attribute and has real, visible copy.
+    // contract. The invitation is deliberately wordless (the brief forbids
+    // instructions anywhere), so what has to hold is that it carries a real
+    // mark rather than an empty box, and that the stylesheet actually makes
+    // that mark move --- a still chevron on a still board reads as furniture.
     const start = doc.querySelector("[data-start]");
     expect(start, "no [data-start] element --- see spec/README.md").toBeTruthy();
-    expect(start?.textContent?.trim(), "[data-start] has no visible copy").not.toBe("");
+
+    const hasMark =
+      (start?.textContent?.trim() ?? "") !== "" || (start?.children.length ?? 0) > 0;
+    expect(hasMark, "[data-start] is empty --- nothing invites the first move").toBe(true);
+
+    const css = readFileSync(resolve("styles.css"), "utf8");
+    const animated = /\.hint[^{]*\{[^}]*animation:\s*([a-z-]+)/i.exec(css);
+    expect(animated, "nothing animates the opening invitation").toBeTruthy();
+    const name = animated?.[1] ?? "";
+    expect(
+      new RegExp(`@keyframes\\s+${name}\\s*\\{`).test(css),
+      `keyframes ${name} are never declared`,
+    ).toBe(true);
   });
 
   it("reserves where an ending will be marked", () => {
@@ -66,6 +80,30 @@ describe("a game", () => {
       expect(
         view.includes(`"${value}"`),
         `styles.css dresses [data-ended="${value}"], which the renderer never writes`,
+      ).toBe(true);
+    }
+  });
+
+  it("gives the chamber markers class names nothing else has claimed", () => {
+    // Same species as the bug above, found the same way --- by looking. The
+    // fifth marker was `.boss`, which is also the boss health bar's class, and
+    // the bar is absolutely positioned: the pip was flung to the top-left
+    // corner of the page and the row silently showed four of five. A modifier
+    // that shares a name with a component inherits the component's layout.
+    const css = readFileSync(resolve("styles.css"), "utf8");
+    const view = readFileSync(resolve("src/render.ts"), "utf8");
+
+    const pip = /classList\.toggle\("([a-z-]+)"/g;
+    const modifiers = [...view.matchAll(pip)].map((m) => m[1]!);
+    expect(modifiers.length, "the renderer toggles no classes at all").toBeGreaterThan(0);
+
+    for (const name of new Set(modifiers)) {
+      const bare = new RegExp(`(^|\\}|,)\\s*\\.${name}\\s*\\{`, "m");
+      const compound = new RegExp(`\\.[a-z-]+\\s*\\.${name}\\b|\\.${name}\\s*\\.`, "m");
+      if (bare.test(css) && !compound.test(css)) continue; // a component in its own right
+      expect(
+        !bare.test(css),
+        `.${name} is both a component in styles.css and a state the renderer toggles`,
       ).toBe(true);
     }
   });

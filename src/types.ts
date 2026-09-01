@@ -15,15 +15,18 @@ export const DIRS: Record<Dir, Vec> = {
   right: { x: 1, y: 0 },
 };
 
-export type EnemyKind = "skeleton" | "gorgon" | "harpy" | "minotaur";
+/** Three foes, one lesson each: bump it, dodge it, bait it. */
+export type EnemyKind = "skeleton" | "medusa" | "minotaur";
 
-export type GodId = "zeus" | "poseidon" | "athena" | "artemis" | "ares" | "hermes";
+export type GodId = "ares" | "hermes" | "athena";
 
 export interface God {
   id: GodId;
+  /** The god. */
   name: string;
-  symbol: string;
-  /** Three or four words. Long enough to promise something, short enough to read at a glance. */
+  /** The gift, named --- what the player will remember it as. */
+  title: string;
+  /** One concrete sentence. No hedging words: it either does this or it doesn't. */
   effect: string;
 }
 
@@ -33,17 +36,23 @@ export interface Enemy {
   pos: Vec;
   hp: number;
   maxHp: number;
-  /** Turns left frozen. The Minotaur is only woundable while this is above zero. */
+  /** Enemy turns it will sit out. The Minotaur is only woundable above zero. */
   stunned: number;
-  /** The intro chamber's guard holds its ground, so the first moves are safe. */
+  /** The opening guard holds its ground, so the first steps are always safe. */
   stationary?: boolean;
 }
 
-/** A marked attack. Drawn this turn, resolved after the player's next move. */
+/**
+ * A marked attack. The one rule the whole game rests on: these tiles are drawn
+ * now, they never move, and they go off after the player's next valid move.
+ * `kind` only decides how it is drawn when it lands.
+ */
 export interface Telegraph {
   ownerId: number;
   tiles: Vec[];
-  kind: "strike" | "charge";
+  kind: "slash" | "beam" | "charge";
+  /** Unit vector from the attacker toward its mark, for the resolve animation. */
+  dir: Vec;
 }
 
 export type Phase = "playing" | "blessing" | "won" | "lost";
@@ -54,14 +63,14 @@ export type GameEvent =
   | { t: "blocked"; at: Vec }
   | { t: "attack"; id: number; at: Vec; damage: number; killed: boolean }
   | { t: "clang"; at: Vec }
-  | { t: "chain"; id: number; at: Vec; killed: boolean }
-  | { t: "push"; from: Vec; to: Vec }
   | { t: "hurt"; at: Vec }
   | { t: "shielded"; at: Vec }
-  | { t: "telegraph"; tiles: Vec[] }
-  | { t: "charge"; path: Vec[]; hit: boolean }
+  | { t: "telegraph"; id: number; tiles: Vec[]; kind: Telegraph["kind"] }
+  // A marked attack going off, whether or not anyone was standing in it.
+  | { t: "lash"; id: number; from: Vec; tiles: Vec[]; kind: Telegraph["kind"]; hit: boolean }
   | { t: "stunned"; at: Vec }
-  | { t: "freeStep" }
+  | { t: "aresCharged" }
+  | { t: "winged"; from: Vec; to: Vec }
   | { t: "roomClear" }
   | { t: "exit" }
   | { t: "blessing" }

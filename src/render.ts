@@ -1,230 +1,357 @@
-// Everything that touches the DOM. It reads engine state and never changes
-// it, so a rule can be tested without a browser and a look can be reworked
-// without touching a rule.
+// Everything the player sees. The engine says what happened; this decides what
+// that looks like. It owns no rules --- if a question can be answered without a
+// browser, it belongs in the engine, not here.
 
-import { CHAMBER_COUNT } from "./rooms.ts";
+import { creatureArt, godArt, heartArt, heroArt } from "./art.ts";
 import type { Engine } from "./engine.ts";
-import { creatureArt, heroArt } from "./art.ts";
-import { type God, type GodId, type Vec, key } from "./types.ts";
+import type { God, GodId, Vec } from "./types.ts";
+import { CHAMBER_COUNT } from "./rooms.ts";
 
-const HERO = 0;
-
-const grab = <T extends HTMLElement>(sel: string): T => {
-  const el = document.querySelector<T>(sel);
-  if (!el) throw new Error(`missing ${sel}`);
-  return el;
+const el = <T extends HTMLElement>(sel: string): T => {
+  const found = document.querySelector<T>(sel);
+  if (!found) throw new Error(`missing element: ${sel}`);
+  return found;
 };
 
+/** How long a resolved attack stays on screen. Matches the CSS animations. */
+const FX_MS = 380;
+
 export class View {
-  private stage = grab("[data-stage]");
-  private board = grab("[data-board]");
-  private actorLayer = grab("[data-actors]");
-  private hint = grab("[data-start]");
-  private heartRow = grab("[data-hearts]");
-  private pipRow = grab("[data-chambers]");
-  private bossBox = grab("[data-boss]");
-  private bossFill = grab("[data-boss-fill]");
-  private gift = grab("[data-gift]");
-  private godRow = grab("[data-gods]");
-  private ending = grab("[data-ending]");
-  private verdict = grab("[data-verdict]");
-  private tally = grab("[data-tally]");
-  private favour = grab("[data-favour]");
+  private stage = el(".stage");
+  private board = el("[data-board]");
+  private actors = el("[data-actors]");
+  private threadLine = el<SVGPolylineElement & HTMLElement>("[data-thread-line]");
+  private hint = el("[data-start]");
+  private hearts = el("[data-hearts]");
+  private chambers = el("[data-chambers]");
+  private gifts = el("[data-gifts]");
+  private bossPanel = el("[data-boss]");
+  private bossFill = el("[data-boss-fill]");
+  private gift = el("[data-gift]");
+  private gods = el("[data-gods]");
+  private ending = el("[data-ending]");
+  private verdict = el("[data-verdict]");
+  private tally = el("[data-tally]");
+  private favour = el("[data-favour]");
 
-  private tiles = new Map<string, HTMLElement>();
+  private tiles: HTMLElement[] = [];
   private sprites = new Map<number, HTMLElement>();
-  private drawn = -1;
+  private hero = document.createElement("div");
+  private size = 9;
 
-  /** Rebuild the floor and repopulate it. Only when the chamber changes. */
+  // ------------------------------------------------------------- the room
+
   drawRoom(game: Engine): void {
-    this.tiles.clear();
-    this.sprites.clear();
+    this.size = game.size;
+    this.stage.style.setProperty("--grid", String(this.size));
     this.board.replaceChildren();
-    this.actorLayer.replaceChildren();
+    this.actors.replaceChildren();
+    this.sprites.clear();
+    this.tiles = [];
 
-    for (let y = 0; y < game.size; y++) {
-      for (let x = 0; x < game.size; x++) {
-        const at = { x, y };
-        const tile = document.createElement("div");
-        const wall = game.isWall(at);
+    for (let y = 0; y < this.size; y++) {
+      for (let x = 0; x < this.size; x++) {
+        const tile = document.createElement("i");
+        const wall = game.isWall({ x, y });
         tile.className = wall ? "tile wall" : "tile floor";
-        if (!wall && (x + y) % 2 === 1) tile.classList.add("alt");
-        if (game.exit && game.exit.x === x && game.exit.y === y) {
-          tile.className = "tile exit";
-        }
-        this.tiles.set(key(at), tile);
+        if (game.exit && game.exit.x === x && game.exit.y === y) tile.classList.add("gate");
         this.board.append(tile);
+        this.tiles.push(tile);
       }
     }
 
-    this.sprites.set(HERO, this.sprite("actor hero", heroArt(), game.player.pos));
-    for (const foe of game.enemies) {
-      this.sprites.set(foe.id, this.sprite(`actor ${foe.kind}`, creatureArt(foe.kind), foe.pos));
+    this.hero = document.createElement("div");
+    this.hero.className = "actor hero";
+    this.hero.innerHTML = heroArt();
+    this.actors.append(this.hero);
+
+    for (const e of game.enemies) {
+      const sprite = document.createElement("div");
+      sprite.className = `actor foe foe-${e.kind}`;
+      // The Minotaur counts his wounds on the bar over the arena; pips as well
+      // would be the same number said twice, and seven of them under one tile.
+      const pips = e.kind === "minotaur" ? "" : `<span class="pips">${"<i></i>".repeat(e.maxHp)}</span>`;
+      sprite.innerHTML = creatureArt(e.kind) + pips;
+      this.actors.append(sprite);
+      this.sprites.set(e.id, sprite);
     }
-    this.drawn = game.chamber;
+
+    this.bossPanel.hidden = !game.bossRoom;
+    this.sync(game);
   }
 
-  private sprite(cls: string, art: string, at: Vec): HTMLElement {
-    const el = document.createElement("div");
-    el.className = cls;
-    el.innerHTML = art;
-    place(el, at);
-    this.actorLayer.append(el);
-    return el;
-  }
+  // ------------------------------------------------------- every-turn draw
 
-  /** Bring the picture back in line with the state, whatever just happened. */
   sync(game: Engine): void {
-    if (game.chamber !== this.drawn) this.drawRoom(game);
+    this.place(this.hero, game.player.pos);
+    this.hero.classList.toggle("sharp", game.aresCharged);
+    this.hero.classList.toggle("warded", game.aegis);
 
-    const danger = new Set(game.dangerTiles().map(key));
-    for (const [at, tile] of this.tiles) {
-      tile.classList.toggle("danger", danger.has(at));
-    }
-    if (game.exit) {
-      this.tiles.get(key(game.exit))?.classList.toggle("open", game.exitOpen);
-    }
-
-    const hero = this.sprites.get(HERO);
-    if (hero) place(hero, game.player.pos);
-
-    const alive = new Set(game.enemies.map((e) => e.id));
-    for (const [id, el] of this.sprites) {
-      if (id === HERO || alive.has(id)) continue;
-      this.sprites.delete(id);
-      el.classList.add("dying");
-      setTimeout(() => el.remove(), 300);
-    }
-    for (const foe of game.enemies) {
-      let el = this.sprites.get(foe.id);
-      if (!el) {
-        el = this.sprite(`actor ${foe.kind}`, creatureArt(foe.kind), foe.pos);
-        this.sprites.set(foe.id, el);
+    for (const [id, sprite] of this.sprites) {
+      const foe = game.enemies.find((e) => e.id === id);
+      if (!foe) {
+        sprite.classList.add("gone");
+        setTimeout(() => sprite.remove(), 320);
+        this.sprites.delete(id);
+        continue;
       }
-      place(el, foe.pos);
-      el.classList.toggle("stunned", foe.stunned > 0);
+      this.place(sprite, foe.pos);
+      sprite.classList.toggle("windup", game.isWindingUp(id));
+      sprite.classList.toggle("stunned", foe.stunned > 0);
+      sprite.classList.toggle("hurt", foe.hp < foe.maxHp);
+      const pips = sprite.querySelectorAll<HTMLElement>(".pips i");
+      pips.forEach((pip, i) => pip.classList.toggle("spent", i >= foe.hp));
     }
 
-    this.heartRow.replaceChildren(
-      ...Array.from({ length: game.player.maxHearts }, (_, i) => {
-        const h = document.createElement("div");
-        h.className = i < game.player.hearts ? "heart" : "heart spent";
-        return h;
-      }),
+    const marked = new Set(game.markedTiles().map((v) => v.y * this.size + v.x));
+    this.tiles.forEach((tile, i) => tile.classList.toggle("marked", marked.has(i)));
+
+    const gate = game.exit ? this.tiles[game.exit.y * this.size + game.exit.x] : null;
+    gate?.classList.toggle("open", game.exitOpen);
+
+    // The chevron sits on the tile the first press would reach, so it points
+    // at a destination rather than merely upwards.
+    this.place(this.hint, { x: game.player.pos.x, y: game.player.pos.y - 1 });
+    this.hint.hidden = game.stirred || game.chamber > 0;
+    this.drawThread(game.trail);
+    this.drawHearts(game);
+    this.drawChambers(game);
+    this.drawGifts(game);
+    this.drawBoss(game);
+  }
+
+  private place(node: HTMLElement, at: Vec): void {
+    node.style.setProperty("--x", String(at.x));
+    node.style.setProperty("--y", String(at.y));
+  }
+
+  /** Ariadne's thread, drawn through the centre of every tile walked. */
+  private drawThread(trail: Vec[]): void {
+    this.threadLine.setAttribute(
+      "points",
+      trail.map((v) => `${v.x + 0.5},${v.y + 0.5}`).join(" "),
     );
+  }
 
-    this.pipRow.replaceChildren(
-      ...Array.from({ length: CHAMBER_COUNT }, (_, i) => {
-        const p = document.createElement("div");
-        p.className = "pip";
-        if (i < game.chamber) p.classList.add("done");
-        if (i === game.chamber) p.classList.add("here");
-        return p;
-      }),
-    );
+  private drawHearts(game: Engine): void {
+    const want = game.player.maxHearts;
+    if (this.hearts.children.length !== want) {
+      this.hearts.innerHTML = heartArt().repeat(want);
+    }
+    [...this.hearts.children].forEach((node, i) => {
+      node.classList.toggle("spent", i >= game.player.hearts);
+    });
+  }
 
-    const boss = game.enemies.find((e) => e.kind === "minotaur");
-    this.bossBox.hidden = !boss;
-    if (boss) this.bossFill.style.width = `${(boss.hp / boss.maxHp) * 100}%`;
+  private drawChambers(game: Engine): void {
+    if (this.chambers.children.length !== CHAMBER_COUNT) {
+      this.chambers.innerHTML = "<li></li>".repeat(CHAMBER_COUNT);
+    }
+    [...this.chambers.children].forEach((node, i) => {
+      node.classList.toggle("done", i < game.chambersCleared);
+      node.classList.toggle("here", i === game.chamber && game.phase === "playing");
+      node.classList.toggle("lair", i === CHAMBER_COUNT - 1);
+    });
+  }
 
-    // The chevron sits on the open floor ahead of Theseus, and leaves for
-    // good the instant he takes a step.
-    if (game.stirred) {
-      this.hint.classList.add("spent");
-    } else {
-      const ahead = { x: game.player.pos.x, y: game.player.pos.y - 1 };
-      place(this.hint, game.isWall(ahead) ? game.player.pos : ahead);
+  /** The gifts taken, and whether each one is ready to spend right now. */
+  private drawGifts(game: Engine): void {
+    const taken = game.favours();
+    const signature = taken.map((g) => g.id).join(",");
+    if (this.gifts.dataset.have !== signature) {
+      this.gifts.dataset.have = signature;
+      this.gifts.replaceChildren(
+        ...taken.map((g) => {
+          const card = document.createElement("span");
+          card.className = `gift-chip chip-${g.id}`;
+          card.title = `${g.name} --- ${g.effect}`;
+          card.innerHTML =
+            godArt(g.id) +
+            (g.id === "hermes" ? `<span class="steps">${'<i></i>'.repeat(4)}</span>` : "");
+          return card;
+        }),
+      );
+    }
+
+    for (const card of this.gifts.children) {
+      const id = card.className.match(/chip-(\w+)/)?.[1] as GodId | undefined;
+      if (id === "ares") card.classList.toggle("ready", game.aresCharged);
+      if (id === "athena") {
+        card.classList.toggle("ready", game.aegis);
+        card.classList.toggle("spent", !game.aegis);
+      }
+      if (id === "hermes") {
+        const lit = game.wingedSteps % 4;
+        [...card.querySelectorAll(".steps i")].forEach((pip, i) =>
+          pip.classList.toggle("lit", i < lit),
+        );
+        card.classList.toggle("ready", lit === 3);
+      }
     }
   }
 
-  /** A brief class on one actor, for an impact or a flinch. */
-  flourish(id: number, cls: string, ms = 340): void {
-    const el = this.sprites.get(id);
-    if (!el) return;
-    el.classList.remove(cls);
-    void el.offsetWidth; // restart the animation rather than ignore a repeat
-    el.classList.add(cls);
-    setTimeout(() => el.classList.remove(cls), ms);
+  private drawBoss(game: Engine): void {
+    this.bossPanel.hidden = !game.bossRoom;
+    if (!game.bossRoom) return;
+    const boss = game.boss();
+    const share = boss ? Math.max(0, boss.hp) / boss.maxHp : 0;
+    this.bossFill.style.setProperty("--share", String(share));
+    this.bossPanel.classList.toggle("open", Boolean(boss && boss.stunned > 0));
   }
 
-  heroFlourish(cls: string, ms = 500): void {
-    this.flourish(HERO, cls, ms);
+  // ------------------------------------------------------------ animations
+
+  /** A short-lived class on one actor. */
+  flourish(id: number, cls: string, ms = 300): void {
+    const sprite = this.sprites.get(id);
+    if (!sprite) return;
+    sprite.classList.add(cls);
+    setTimeout(() => sprite.classList.remove(cls), ms);
   }
 
-  jolt(): void {
-    this.stage.classList.remove("jolt");
-    void this.stage.offsetWidth;
-    this.stage.classList.add("jolt");
-    setTimeout(() => this.stage.classList.remove("jolt"), 240);
+  heroFlourish(cls: string, ms = 300): void {
+    this.hero.classList.add(cls);
+    setTimeout(() => this.hero.classList.remove(cls), ms);
   }
 
-  spark(at: Vec, tone = "#f3cd6b"): void {
-    const s = document.createElement("div");
-    s.className = "spark";
-    s.style.setProperty("--tone", tone);
-    place(s, at);
-    this.actorLayer.append(s);
-    setTimeout(() => s.remove(), 420);
+  /** The whole board recoils. Used for wounds, crashes and the killing blow. */
+  jolt(cls = "jolt"): void {
+    this.stage.classList.add(cls);
+    setTimeout(() => this.stage.classList.remove(cls), 420);
   }
 
+  /** A beat of stillness on impact, so a hit registers as an event. */
+  hitstop(): void {
+    this.stage.classList.add("hitstop");
+    setTimeout(() => this.stage.classList.remove("hitstop"), 90);
+  }
+
+  /** The white flash on the tile a blow landed on. */
+  spark(at: Vec, tone = "gold"): void {
+    const fx = document.createElement("div");
+    fx.className = `fx spark tone-${tone}`;
+    this.place(fx, at);
+    this.actors.append(fx);
+    setTimeout(() => fx.remove(), FX_MS);
+  }
+
+  /** A sword arc thrown from one tile into the next. */
+  arc(from: Vec, to: Vec): void {
+    const fx = document.createElement("div");
+    fx.className = "fx arc";
+    fx.style.setProperty("--turn", String(this.angle(from, to)));
+    this.place(fx, to);
+    this.actors.append(fx);
+    setTimeout(() => fx.remove(), FX_MS);
+  }
+
+  /**
+   * A resolved telegraph: a slash on one tile, or a beam or charge stretched
+   * along however many tiles were marked.
+   */
+  lash(from: Vec, tiles: Vec[], kind: string): void {
+    if (tiles.length === 0) return;
+    const head = tiles[0]!;
+    const tail = tiles[tiles.length - 1]!;
+    const vertical = head.x === tail.x && tiles.length > 1;
+    const fx = document.createElement("div");
+    fx.className = `fx lash lash-${kind} ${vertical ? "down" : "across"}`;
+    fx.style.setProperty("--len", String(tiles.length));
+    fx.style.setProperty("--turn", String(this.angle(from, head)));
+    this.place(fx, {
+      x: Math.min(head.x, tail.x),
+      y: Math.min(head.y, tail.y),
+    });
+    this.actors.append(fx);
+    setTimeout(() => fx.remove(), FX_MS + 120);
+  }
+
+  private angle(from: Vec, to: Vec): number {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    if (dy < 0) return 0;
+    if (dx > 0) return 0.25;
+    if (dy > 0) return 0.5;
+    return 0.75;
+  }
+
+  // -------------------------------------------------------------- overlays
+
+  /**
+   * The blessing cards. Mouse, touch, Left/Right and Enter/Space all work, and
+   * the buttons are destroyed on close so nothing focusable is ever left
+   * sitting behind an overlay.
+   */
   offerGods(gods: readonly God[], take: (id: GodId) => void): void {
-    this.godRow.replaceChildren(
-      ...gods.map((g) => {
-        const b = document.createElement("button");
-        b.type = "button";
-        b.className = "god";
-        b.innerHTML =
-          `<span class="symbol">${g.symbol}</span>` +
-          `<span class="name">${g.name}</span>` +
-          `<span class="effect">${g.effect}</span>`;
-        b.addEventListener("click", () => take(g.id));
-        return b;
-      }),
-    );
+    const buttons = gods.map((g, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = `god god-${g.id}`;
+      b.dataset.god = g.id;
+      b.innerHTML = `
+        <span class="god-art">${godArt(g.id)}</span>
+        <span class="god-name">${g.name}</span>
+        <span class="god-title">${g.title}</span>
+        <span class="god-effect">${g.effect}</span>`;
+      b.addEventListener("click", () => take(g.id));
+      b.addEventListener("keydown", (event) => {
+        const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+        if (step === 0) return;
+        event.preventDefault();
+        const next = (i + step + buttons.length) % buttons.length;
+        buttons[next]!.focus();
+      });
+      return b;
+    });
+
+    this.gods.replaceChildren(...buttons);
     this.gift.hidden = false;
-    this.godRow.querySelector("button")?.focus();
+    requestAnimationFrame(() => buttons[0]?.focus());
   }
 
   closeGods(): void {
     this.gift.hidden = true;
+    this.gods.replaceChildren();
   }
 
-  finish(game: Engine, gods: readonly God[]): void {
+  // ---------------------------------------------------------------- ending
+
+  finish(game: Engine): void {
     const won = game.phase === "won";
     this.ending.dataset.ended = won ? "win" : "loss";
-    this.verdict.textContent = won
-      ? "The labyrinth releases you"
-      : "The labyrinth claims another hero";
+    this.verdict.textContent = won ? "THE THREAD HOLDS" : "THE THREAD BREAKS";
 
     this.tally.replaceChildren();
-    for (const [label, value] of [
-      ["Chambers", `${game.chambersCleared} / ${CHAMBER_COUNT}`],
-      ["Favour", String(game.blessings.length)],
-    ]) {
+    const rows: [string, string][] = [
+      ["CHAMBERS", `${game.chambersCleared} / ${CHAMBER_COUNT}`],
+      ["LIFE", `${Math.max(0, game.player.hearts)} / ${game.player.maxHearts}`],
+    ];
+    for (const [label, value] of rows) {
       const dt = document.createElement("dt");
-      dt.textContent = label!;
+      dt.textContent = label;
       const dd = document.createElement("dd");
-      dd.textContent = value!;
+      dd.textContent = value;
       this.tally.append(dt, dd);
     }
 
-    this.favour.textContent = game.blessings
-      .map((id) => gods.find((g) => g.id === id)?.symbol ?? "")
-      .join(" ");
+    this.favour.replaceChildren(
+      ...game.favours().map((g) => {
+        const chip = document.createElement("span");
+        chip.className = `gift-chip chip-${g.id}`;
+        chip.innerHTML = `${godArt(g.id)}<em>${g.title}</em>`;
+        return chip;
+      }),
+    );
+
+    this.stage.classList.toggle("daylight", won);
     this.ending.hidden = false;
-    this.ending.querySelector<HTMLButtonElement>("[data-again]")?.focus();
+    requestAnimationFrame(() => el<HTMLButtonElement>("[data-again]").focus());
   }
 
   reset(): void {
     this.ending.hidden = true;
     this.ending.dataset.ended = "";
-    this.gift.hidden = true;
-    this.hint.classList.remove("spent");
-    this.drawn = -1;
+    this.stage.classList.remove("daylight");
+    this.closeGods();
   }
-}
-
-function place(el: HTMLElement, at: Vec): void {
-  el.style.setProperty("--x", String(at.x));
-  el.style.setProperty("--y", String(at.y));
 }

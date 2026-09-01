@@ -1,149 +1,189 @@
-// Wiring: keys in, engine turn, then a flourish per thing that happened.
+// Wiring. Keys and taps go in, engine events come back, and each one is turned
+// into a sound and a piece of motion. Nothing here decides a rule.
 
-import { Engine, GODS } from "./src/engine.ts";
+import { Engine } from "./src/engine.ts";
 import { View } from "./src/render.ts";
 import { Sound } from "./src/audio.ts";
-import type { Dir, GameEvent, GodId } from "./src/types.ts";
+import type { Dir, GodId } from "./src/types.ts";
 
-// A run is seeded, so `?seed=7` replays the exact same five chambers --- which
-// is how a bug found while playing gets looked at twice. No seed, no URL, no
-// difference to anyone who just opens the page.
-const seed = Number(new URLSearchParams(location.search).get("seed"));
-const game = new Engine(Number.isFinite(seed) && seed !== 0 ? seed : undefined);
+const game = new Engine();
 const view = new View();
 const sound = new Sound();
 
 const KEYS: Record<string, Dir> = {
-  arrowup: "up",
+  ArrowUp: "up",
+  ArrowDown: "down",
+  ArrowLeft: "left",
+  ArrowRight: "right",
   w: "up",
-  arrowdown: "down",
-  s: "down",
-  arrowleft: "left",
   a: "left",
-  arrowright: "right",
+  s: "down",
   d: "right",
+  W: "up",
+  A: "left",
+  S: "down",
+  D: "right",
 };
 
-function react(ev: GameEvent): void {
+function react(ev: ReturnType<Engine["input"]>[number]): void {
   switch (ev.t) {
     case "move":
       sound.step();
       break;
+
+    case "winged":
+      sound.wing();
+      view.heroFlourish("winged", 320);
+      break;
+
     case "blocked":
       sound.bump();
       break;
-    case "attack":
-      sound.strike();
-      view.spark(ev.at);
-      if (ev.killed) sound.kill();
-      else view.flourish(ev.id, "struck", 240);
+
+    case "attack": {
+      view.arc(game.player.pos, ev.at);
+      view.spark(ev.at, ev.killed ? "bone" : "gold");
+      view.flourish(ev.id, "struck", 320);
+      view.heroFlourish("lunge", 260);
+      view.hitstop();
+      if (ev.killed) {
+        sound.kill();
+        view.jolt("shudder");
+      } else {
+        sound.strike();
+      }
       break;
-    case "chain":
-      sound.zap();
-      view.spark(ev.at, "#cfe9ff");
-      if (!ev.killed) view.flourish(ev.id, "struck", 240);
-      break;
+    }
+
     case "clang":
       sound.clang();
-      view.spark(ev.at, "#e8e2d0");
+      view.spark(ev.at, "stone");
+      view.heroFlourish("rebuff", 300);
       break;
+
+    case "aresCharged":
+      sound.ward();
+      break;
+
+    case "telegraph":
+      sound.charge();
+      break;
+
+    case "lash":
+      view.lash(ev.from, ev.tiles, ev.kind);
+      if (ev.kind === "charge") sound.stampede();
+      else sound.swipe();
+      break;
+
+    case "stunned":
+      sound.crash();
+      view.jolt("shudder");
+      view.spark(ev.at, "stone");
+      break;
+
     case "hurt":
       sound.hurt();
       view.jolt();
-      view.heroFlourish("wounded", 340);
+      view.heroFlourish("wounded", 480);
+      view.spark(ev.at, "blood");
+      view.hitstop();
       break;
+
     case "shielded":
       sound.ward();
-      view.heroFlourish("warded", 520);
+      view.heroFlourish("warded-flash", 520);
+      view.spark(ev.at, "divine");
       break;
-    case "charge":
-      sound.charge();
-      if (ev.hit) view.jolt();
-      break;
+
     case "roomClear":
       sound.door();
       break;
+
     case "exit":
-      sound.door();
-      break;
-    case "blessing":
       sound.gift();
       break;
+
+    case "blessing":
+      view.offerGods(game.offer, take);
+      break;
+
     case "won":
       sound.win();
+      view.jolt("shudder");
+      setTimeout(() => view.finish(game), 700);
       break;
+
     case "lost":
       sound.lose();
-      break;
-    case "push":
-    case "telegraph":
-    case "stunned":
-    case "freeStep":
+      view.jolt();
+      setTimeout(() => view.finish(game), 620);
       break;
   }
 }
 
-// Read through a call, so the compiler doesn't narrow `phase` at the guard
-// and then disbelieve the engine when a turn changes it.
-const playing = (): boolean => game.phase === "playing";
+let chamber = game.chamber;
 
 function turn(dir: Dir): void {
-  if (!playing()) return;
-  const events = game.input(dir);
-  view.sync(game);
-  for (const ev of events) react(ev);
-
-  if (game.phase === "blessing") {
-    view.offerGods(game.offer, take);
-  } else if (game.phase === "won" || game.phase === "lost") {
-    // Hold on the frozen room for a beat before the verdict lands.
-    setTimeout(() => view.finish(game, GODS), 520);
+  if (game.phase !== "playing") return;
+  const before = game.chamber;
+  for (const ev of game.input(dir)) react(ev);
+  if (game.chamber !== before || chamber !== game.chamber) {
+    chamber = game.chamber;
+    view.drawRoom(game);
+  } else {
+    view.sync(game);
   }
 }
 
 function take(id: GodId): void {
-  game.choose(id);
   view.closeGods();
-  view.sync(game);
-  sound.door();
+  game.choose(id);
+  chamber = game.chamber;
+  view.drawRoom(game);
 }
 
-window.addEventListener("keydown", (e) => {
-  const dir = KEYS[e.key.toLowerCase()];
-  if (!dir) return;
-  e.preventDefault();
-  turn(dir);
+addEventListener("keydown", (event) => {
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
+  const dir = KEYS[event.key];
+  if (dir) {
+    event.preventDefault();
+    turn(dir);
+  }
 });
 
-// Swiping, so the labyrinth is not desktop-only.
+// Swipes, for a phone. Same four directions, same rules.
 let touch: { x: number; y: number } | null = null;
-addEventListener("touchstart", (e) => {
-  const t = e.changedTouches[0];
-  touch = t ? { x: t.clientX, y: t.clientY } : null;
-}, { passive: true });
-addEventListener("touchend", (e) => {
-  const t = e.changedTouches[0];
+addEventListener(
+  "touchstart",
+  (event) => {
+    const t = event.changedTouches[0];
+    touch = t ? { x: t.clientX, y: t.clientY } : null;
+  },
+  { passive: true },
+);
+addEventListener("touchend", (event) => {
+  const t = event.changedTouches[0];
   if (!touch || !t) return;
   const dx = t.clientX - touch.x;
   const dy = t.clientY - touch.y;
   touch = null;
-  if (Math.hypot(dx, dy) < 24) return;
-  if (Math.abs(dx) > Math.abs(dy)) turn(dx > 0 ? "right" : "left");
-  else turn(dy > 0 ? "down" : "up");
-}, { passive: true });
+  if (Math.abs(dx) < 24 && Math.abs(dy) < 24) return;
+  turn(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : dy > 0 ? "down" : "up");
+});
 
 document.querySelector("[data-again]")?.addEventListener("click", () => {
-  game.restart();
   view.reset();
+  game.restart();
+  chamber = game.chamber;
   view.drawRoom(game);
-  view.sync(game);
 });
 
 const mute = document.querySelector<HTMLButtonElement>("[data-mute]");
 mute?.addEventListener("click", () => {
   sound.muted = !sound.muted;
   mute.setAttribute("aria-pressed", String(sound.muted));
+  mute.classList.toggle("off", sound.muted);
 });
 
 view.drawRoom(game);
-view.sync(game);
+

@@ -58,57 +58,98 @@ export class Sound {
   }
 
   step(): void {
-    this.tone(180, 0.06, { wave: "sine", gain: 0.05, slide: -50 });
+    this.tone(150, 0.05, { wave: "sine", gain: 0.05, slide: -30 });
   }
+
+  /** Hermes' second tile: the same footfall, lifted. */
+  wing(): void {
+    this.tone(320, 0.07, { wave: "sine", gain: 0.05, slide: 240 });
+    this.tone(520, 0.09, { wave: "sine", gain: 0.04, slide: 200, delay: 0.05 });
+  }
+
+  /** A wall. Dull, short, and clearly not a turn. */
   bump(): void {
-    this.tone(90, 0.07, { wave: "square", gain: 0.035 });
+    this.tone(88, 0.07, { wave: "square", gain: 0.05, slide: -24 });
   }
+
+  /** Bronze on bone. The one cue the whole opening rests on. */
   strike(): void {
-    this.hiss(0.1, 0.09, 3200);
-    this.tone(320, 0.09, { wave: "square", gain: 0.07, slide: -170 });
+    this.hiss(0.09, 0.11, 5200);
+    this.tone(680, 0.09, { wave: "square", gain: 0.09, slide: -420 });
+    this.tone(240, 0.16, { wave: "triangle", gain: 0.1, slide: -120 });
   }
+
+  /** A kill. The strike, plus the thing coming apart after it. */
   kill(): void {
-    this.tone(420, 0.26, { wave: "triangle", gain: 0.09, slide: -320 });
+    this.strike();
+    this.hiss(0.24, 0.09, 2600);
+    this.tone(420, 0.2, { wave: "triangle", gain: 0.09, slide: -300, delay: 0.05 });
+    this.tone(196, 0.3, { wave: "sine", gain: 0.08, slide: -80, delay: 0.09 });
   }
-  zap(): void {
-    this.tone(880, 0.13, { wave: "sawtooth", gain: 0.06, slide: 420 });
-  }
+
+  /** A blade turned on the Minotaur's hide. Nothing happened, and it sounds it. */
   clang(): void {
-    // Two detuned squares: the sound of a blade finding hide it cannot cut.
-    this.tone(1180, 0.16, { wave: "square", gain: 0.05 });
-    this.tone(1610, 0.13, { wave: "square", gain: 0.035 });
+    this.tone(1180, 0.16, { wave: "square", gain: 0.06, slide: -160 });
+    this.tone(880, 0.22, { wave: "sine", gain: 0.05, slide: -120, delay: 0.02 });
   }
-  hurt(): void {
-    this.hiss(0.22, 0.09, 700);
-    this.tone(150, 0.32, { wave: "sawtooth", gain: 0.1, slide: -90 });
-  }
-  ward(): void {
-    [660, 880, 1320].forEach((f, i) =>
-      this.tone(f, 0.4, { wave: "sine", gain: 0.06, delay: i * 0.05 }),
-    );
-  }
+
+  /** A mark going down: an intake of breath, rising. */
   charge(): void {
-    this.hiss(0.34, 0.1, 420);
-    this.tone(70, 0.34, { wave: "sawtooth", gain: 0.1, slide: 40 });
+    this.tone(210, 0.16, { wave: "sawtooth", gain: 0.045, slide: 190 });
   }
+
+  /** A mark going off, on empty floor or otherwise. */
+  swipe(): void {
+    this.hiss(0.13, 0.07, 3400);
+    this.tone(520, 0.11, { wave: "sawtooth", gain: 0.05, slide: -320 });
+  }
+
+  /** The Minotaur crossing the room. */
+  stampede(): void {
+    this.hiss(0.3, 0.1, 900);
+    this.tone(70, 0.3, { wave: "square", gain: 0.09, slide: 40 });
+  }
+
+  /** Horns into stone. This is the sound that says "now". */
+  crash(): void {
+    this.hiss(0.4, 0.13, 1500);
+    this.tone(58, 0.42, { wave: "square", gain: 0.11, slide: -18 });
+    this.tone(150, 0.24, { wave: "triangle", gain: 0.07, slide: -90, delay: 0.03 });
+  }
+
+  /** A heart gone. Low, and longer than anything else. */
+  hurt(): void {
+    this.tone(180, 0.34, { wave: "sawtooth", gain: 0.11, slide: -110 });
+    this.tone(90, 0.42, { wave: "sine", gain: 0.09, slide: -40, delay: 0.03 });
+  }
+
+  /** Athena turning a blow, or Ares banking one. Bright and clean. */
+  ward(): void {
+    this.tone(880, 0.14, { wave: "sine", gain: 0.07, slide: 320 });
+    this.tone(1320, 0.2, { wave: "sine", gain: 0.05, slide: 180, delay: 0.06 });
+  }
+
+  /** The gate unbarring itself. */
   door(): void {
-    [523, 659, 784].forEach((f, i) =>
-      this.tone(f, 0.3, { wave: "triangle", gain: 0.07, delay: i * 0.07 }),
-    );
+    this.tone(300, 0.24, { wave: "triangle", gain: 0.08, slide: 220 });
+    this.tone(600, 0.3, { wave: "sine", gain: 0.06, slide: 300, delay: 0.08 });
   }
+
   gift(): void {
-    [392, 523, 659, 784].forEach((f, i) =>
-      this.tone(f, 0.7, { wave: "sine", gain: 0.055, delay: i * 0.06 }),
-    );
+    this.tone(523, 0.2, { wave: "sine", gain: 0.07 });
+    this.tone(659, 0.22, { wave: "sine", gain: 0.06, delay: 0.09 });
+    this.tone(784, 0.3, { wave: "sine", gain: 0.06, delay: 0.18 });
   }
+
   win(): void {
-    [523, 659, 784, 1047].forEach((f, i) =>
-      this.tone(f, 0.8, { wave: "triangle", gain: 0.08, delay: i * 0.13 }),
+    [392, 523, 659, 784, 1047].forEach((f, i) =>
+      this.tone(f, 0.5, { wave: "triangle", gain: 0.08, delay: i * 0.12 }),
     );
   }
+
   lose(): void {
-    [392, 330, 262, 196].forEach((f, i) =>
-      this.tone(f, 0.75, { wave: "sine", gain: 0.08, delay: i * 0.16 }),
+    [294, 233, 175, 131].forEach((f, i) =>
+      this.tone(f, 0.5, { wave: "sine", gain: 0.09, delay: i * 0.16 }),
     );
   }
 }

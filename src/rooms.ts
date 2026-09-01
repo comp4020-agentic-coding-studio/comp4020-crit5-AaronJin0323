@@ -1,179 +1,159 @@
-// Chambers are hand-drawn and only their population is random. That keeps the
-// labyrinth legible --- a layout you can read at a glance --- while enemy
-// kinds and positions still differ from run to run.
+// Five hand-composed chambers, in a fixed order, with fixed populations. The
+// labyrinth is the same every run on purpose: each chamber teaches exactly one
+// thing, and a player who died to a mistake gets to come back and answer it.
 //
-//   #  wall        .  floor
-//   P  Theseus     E  the way out
-//   o  a spawn slot (more slots than enemies; the engine picks which fill)
+//   #  wall          .  floor
+//   P  Theseus       E  the way out
+//   g  the opening guard (one wound and it falls)
+//   s  a skeleton --- walks at you, marks the tile you stand on
+//   m  a medusa   --- holds still, marks the whole line she shares with you
 //   M  the Minotaur
+//
+// Every chamber opens with Theseus on a wide row, so whatever is marked first
+// there is always a tile to step onto instead.
 
 import type { EnemyKind } from "./types.ts";
-import { type Rng, pick, sample } from "./rng.ts";
 
 export const GRID = 9;
+export const CHAMBER_COUNT = 5;
 
 /**
- * The opening chamber, and the only one that is taught rather than generated.
- * Theseus stands in a stub of corridor; the way out is visible and barred
- * three tiles ahead; a single guard holds the middle of the room. Walking up
- * twice is safe, and the third step is the one that meets the guard.
+ * Chambers that hand out a blessing once cleared, by index. The brief's
+ * "after chambers 1 and 3" --- the first, to reward the very first kill, and
+ * the third, just before the two hard rooms.
  */
-const INTRO = [
+export const BLESSING_AFTER = new Set([0, 2]);
+
+/**
+ * 1 --- the lesson is "move into it". Theseus at the bottom of a corridor, one
+ * guard two tiles ahead, the barred way out in plain sight beyond it. One step
+ * to learn that the chevron means walk; the next step is the kill.
+ */
+const ONE = [
   "#########",
   "####E####",
-  "####.####",
   "###...###",
-  "###.o.###",
   "###...###",
-  "####.####",
+  "###...###",
+  "####g####",
+  "###...###",
   "####P####",
   "#########",
 ];
 
-const CHAMBERS = [
-  [
-    "#########",
-    "#...E...#",
-    "#.#...#.#",
-    "#..o.o..#",
-    "#.#...#.#",
-    "#..o.o..#",
-    "#.#...#.#",
-    "#...P...#",
-    "#########",
-  ],
-  [
-    "#########",
-    "#...E...#",
-    "#.o...o.#",
-    "#..###..#",
-    "#o.....o#",
-    "#..###..#",
-    "#...o...#",
-    "#...P...#",
-    "#########",
-  ],
-  [
-    "#########",
-    "#..E....#",
-    "#.......#",
-    "#.o...o.#",
-    "#...#...#",
-    "#.#...#.#",
-    "#..o.o..#",
-    "#...P...#",
-    "#########",
-  ],
-  [
-    "#########",
-    "#...E...#",
-    "#.#.#.#.#",
-    "#o.....o#",
-    "#.#.#.#.#",
-    "#..o.o..#",
-    "#.#.#.#.#",
-    "#...P...#",
-    "#########",
-  ],
-];
-
-const BOSS = [
+/**
+ * 2 --- the lesson is the telegraph. One pursuer in an open room with pillars,
+ * so there is always somewhere to step when it marks your tile.
+ */
+const TWO = [
   "#########",
+  "#...E...#",
   "#.......#",
   "#..#.#..#",
-  "#.......#",
-  "#...M...#",
-  "#.......#",
+  "#...s...#",
   "#..#.#..#",
+  "#.......#",
   "#...P...#",
   "#########",
 ];
+
+/**
+ * 3 --- the lesson is the line. The medusa starts on Theseus's own column, so
+ * her first mark is the whole of it and the answer is one step sideways.
+ */
+const THREE = [
+  "#########",
+  "#...E...#",
+  "#.......#",
+  "#...m...#",
+  "#.#...#.#",
+  "#.......#",
+  "#.#...#.#",
+  "#...P...#",
+  "#########",
+];
+
+/**
+ * 4 --- both at once. The medusa is the near threat and the skeletons are the
+ * far one, so the room is read front-to-back rather than all in one turn.
+ */
+const FOUR = [
+  "#########",
+  "#...E...#",
+  "#..s.s..#",
+  "#.......#",
+  "#.#...#.#",
+  "#...m...#",
+  "#.......#",
+  "#...P...#",
+  "#########",
+];
+
+/**
+ * 5 --- the Minotaur. Long clear lines for it to charge down and pillars for
+ * it to crash into, and no exit: the only way out is through him.
+ */
+const BOSS = [
+  "#########",
+  "#.......#",
+  "#.......#",
+  "#..#.#..#",
+  "#...M...#",
+  "#..#.#..#",
+  "#.......#",
+  "#...P...#",
+  "#########",
+];
+
+const LAYOUTS = [ONE, TWO, THREE, FOUR, BOSS];
+
+export interface Spawn {
+  x: number;
+  y: number;
+  kind: EnemyKind;
+  hp: number;
+  /** Holds its ground. Only the opening guard does. */
+  stationary?: boolean;
+}
 
 export interface RoomPlan {
   walls: string[];
   start: { x: number; y: number };
   exit: { x: number; y: number } | null;
-  spawns: { x: number; y: number; kind: EnemyKind }[];
+  spawns: Spawn[];
   boss: boolean;
 }
 
-/** How many enemies each chamber fields, and what it may field them as. */
-const WAVES: { count: number; kinds: EnemyKind[] }[] = [
-  { count: 1, kinds: ["skeleton"] },
-  { count: 2, kinds: ["skeleton", "skeleton", "harpy"] },
-  { count: 3, kinds: ["skeleton", "harpy", "gorgon"] },
-  // Never two gorgons. Their marks are whole lines, so a pair at right angles
-  // covers your tile and all four neighbours at once --- damage with no answer,
-  // which is the one thing this fight is not allowed to do.
-  { count: 4, kinds: ["skeleton", "skeleton", "harpy", "gorgon"] },
-];
+/** What each map letter spawns. The opening guard is the only one-wound foe. */
+const ROSTER: Record<string, Omit<Spawn, "x" | "y">> = {
+  g: { kind: "skeleton", hp: 1, stationary: true },
+  s: { kind: "skeleton", hp: 2 },
+  m: { kind: "medusa", hp: 2 },
+  // Seven, so one crash window is not the whole fight. Measured, not chosen:
+  // at three he died inside a single stun and the encounter was one trick
+  // performed once; at seven the bot needs two crashes for a median fight of
+  // fifteen turns, which is bait, punish, watch him get up, bait again.
+  M: { kind: "minotaur", hp: 7 },
+};
 
-export const CHAMBER_COUNT = 5;
-
-/** Chambers that hand out a blessing once cleared. */
-export const BLESSING_AFTER = new Set([2, 3]);
-
-function parse(rows: string[]): {
-  walls: string[];
-  start: { x: number; y: number };
-  exit: { x: number; y: number } | null;
-  slots: { x: number; y: number }[];
-  bossAt: { x: number; y: number } | null;
-} {
+export function buildRoom(chamber: number): RoomPlan {
+  const rows = LAYOUTS[Math.min(chamber, LAYOUTS.length - 1)]!;
   const walls: string[] = [];
-  const slots: { x: number; y: number }[] = [];
+  const spawns: Spawn[] = [];
   let start = { x: 4, y: 7 };
   let exit: { x: number; y: number } | null = null;
-  let bossAt: { x: number; y: number } | null = null;
 
   rows.forEach((row, y) => {
     [...row].forEach((cell, x) => {
       if (cell === "#") walls.push(`${x},${y}`);
       else if (cell === "P") start = { x, y };
       else if (cell === "E") exit = { x, y };
-      else if (cell === "o") slots.push({ x, y });
-      else if (cell === "M") bossAt = { x, y };
+      else {
+        const spec = ROSTER[cell];
+        if (spec) spawns.push({ x, y, ...spec });
+      }
     });
   });
 
-  return { walls, start, exit, slots, bossAt };
-}
-
-export function buildRoom(chamber: number, rng: Rng): RoomPlan {
-  if (chamber === 0) {
-    const { walls, start, exit, slots } = parse(INTRO);
-    return {
-      walls,
-      start,
-      exit,
-      // The guard is fixed, not sampled: the first chamber has one lesson to
-      // teach and teaches it the same way every run.
-      spawns: slots.map((s) => ({ ...s, kind: "skeleton" as const })),
-      boss: false,
-    };
-  }
-
-  if (chamber >= CHAMBER_COUNT - 1) {
-    const { walls, start, exit, bossAt } = parse(BOSS);
-    return {
-      walls,
-      start,
-      exit,
-      spawns: bossAt ? [{ ...(bossAt as { x: number; y: number }), kind: "minotaur" as const }] : [],
-      boss: true,
-    };
-  }
-
-  const { walls, start, exit, slots } = parse(pick(rng, CHAMBERS));
-  const wave = WAVES[Math.min(chamber, WAVES.length - 1)]!;
-  const places = sample(rng, slots, wave.count);
-  const kinds = sample(rng, wave.kinds, places.length);
-
-  return {
-    walls,
-    start,
-    exit,
-    spawns: places.map((p, i) => ({ ...p, kind: kinds[i] ?? "skeleton" })),
-    boss: false,
-  };
+  return { walls, start, exit, spawns, boss: rows === BOSS };
 }

@@ -1,13 +1,16 @@
-// The rules of the labyrinth. No DOM, no timers, no randomness that isn't
-// seeded --- so a whole run can be replayed inside a test.
+// The rules. No DOM, no timers, no randomness: the same keys pressed in the
+// same order always produce the same run, which is what lets a player learn
+// the labyrinth instead of re-rolling it.
 //
-// The one rule everything else hangs off: a move and an attack are the same
-// keypress. Step into empty floor and you travel; step into a foe and you
-// strike instead, staying where you are. Every move is therefore a choice
-// about where you will be standing when the marked tiles go off.
+// The whole game rests on one promise, and every enemy keeps it:
+//
+//   A marked tile is attacked after the player's next valid move.
+//
+// Marks never move once drawn. Walking into a wall is not a move, so it costs
+// nothing. Standing on a marked tile when it goes off is the only way to be
+// wounded, and it is always avoidable when the mark appears.
 
 import {
-  DIRS,
   type Dir,
   type Enemy,
   type EnemyKind,
@@ -17,27 +20,50 @@ import {
   type Phase,
   type Telegraph,
   type Vec,
+  DIRS,
   add,
-  adjacent,
   eq,
   key,
+  manhattan,
 } from "./types.ts";
 import { BLESSING_AFTER, CHAMBER_COUNT, GRID, buildRoom } from "./rooms.ts";
-import { type Rng, mulberry32, sample } from "./rng.ts";
 
+/** Three gifts. Each is a sentence with no "sometimes" in it. */
 export const GODS: readonly God[] = [
-  { id: "zeus", name: "ZEUS", symbol: "⚡", effect: "Strikes leap to a neighbour" },
-  { id: "poseidon", name: "POSEIDON", symbol: "🌊", effect: "Strikes hurl foes back" },
-  { id: "athena", name: "ATHENA", symbol: "🦉", effect: "Turn the first wound" },
-  { id: "artemis", name: "ARTEMIS", symbol: "🏹", effect: "Every third strike doubles" },
-  { id: "ares", name: "ARES", symbol: "🔥", effect: "A kill sharpens the blade" },
-  { id: "hermes", name: "HERMES", symbol: "💨", effect: "Sometimes a second step" },
+  {
+    id: "ares",
+    name: "ARES",
+    title: "Blood Momentum",
+    effect: "After a kill, your next strike deals +1.",
+  },
+  {
+    id: "hermes",
+    name: "HERMES",
+    title: "Winged Step",
+    effect: "Every fourth move travels two tiles.",
+  },
+  {
+    id: "athena",
+    name: "ATHENA",
+    title: "Aegis",
+    effect: "Block the next wound.",
+  },
 ];
 
-const HP: Record<EnemyKind, number> = { skeleton: 2, harpy: 1, gorgon: 2, minotaur: 4 };
+/**
+ * Enemy turns the Minotaur loses to a crash --- and so, player turns gained.
+ * Sized by the arena, not by taste: he charges wall to wall, so the crash can
+ * be most of the room away from wherever Theseus dodged to, and the window has
+ * to be long enough to cross that. Bait him from near the wall he will hit and
+ * the same window buys four blows instead of one; that gap is the skill.
+ * Shortening it is not a difficulty knob: at four, one run in twenty never
+ * lands a blow at all and the fight simply never ends. Length comes from
+ * his health instead --- see the roster.
+ */
+const CRASH_STUN = 6;
 
-/** How far a kind travels in one turn. */
-const SPEED: Record<EnemyKind, number> = { skeleton: 1, harpy: 2, gorgon: 1, minotaur: 1 };
+/** How many of the player's own tiles the thread remembers, per chamber. */
+const THREAD_LENGTH = 48;
 
 export class Engine {
   readonly size = GRID;
@@ -45,6 +71,8 @@ export class Engine {
   player = { pos: { x: 4, y: 7 } as Vec, hearts: 3, maxHearts: 3 };
   enemies: Enemy[] = [];
   telegraphs: Telegraph[] = [];
+  /** Ariadne's thread: every tile Theseus has stood on in this chamber. */
+  trail: Vec[] = [];
   exit: Vec | null = null;
   exitOpen = false;
   chamber = 0;
@@ -52,201 +80,275 @@ export class Engine {
   blessings: GodId[] = [];
   offer: God[] = [];
   phase: Phase = "playing";
-  /** False until the very first keypress lands, which is what retires the hint. */
+  /** False until the first key lands, so the opening chevron can retire. */
   stirred = false;
   bossRoom = false;
 
-  private rng: Rng;
-  private nextId = 1;
-  private strikes = 0;
-  private aresTurns = 0;
-  private shieldSpent = false;
-  private queued = 0;
+  // --- Blessing state. Public, because the HUD draws all three of these. ---
+  /** Ares: a kill is banked and the next strike is sharpened. */
+  aresCharged = false;
+  /** Hermes: moves taken, mod four. Three lit pips mean the next one doubles. */
+  wingedSteps = 0;
+  /** Athena: one wound still to be turned aside. */
+  aegis = false;
 
-  constructor(seed: number = Date.now()) {
-    this.rng = mulberry32(seed);
+  private nextId = 1;
+  /** Stunned during this very input --- so the count isn't spent immediately. */
+  private stunnedNow = new Set<number>();
+
+  constructor() {
     this.loadChamber(0);
   }
 
-  // --- queries ----------------------------------------------------------
-
-  inBounds = (v: Vec): boolean => v.x >= 0 && v.y >= 0 && v.x < this.size && v.y < this.size;
-  isWall = (v: Vec): boolean => this.walls.has(key(v));
-  enemyAt = (v: Vec): Enemy | undefined => this.enemies.find((e) => eq(e.pos, v));
-  hasBlessing = (id: GodId): boolean => this.blessings.includes(id);
-
-  /** Somewhere an enemy could stand: on the board, not rock, not already taken. */
-  private free(v: Vec): boolean {
-    return this.inBounds(v) && !this.isWall(v) && !this.enemyAt(v) && !eq(v, this.player.pos);
-  }
-
-  /** Every tile currently marked for an attack, flattened for the renderer. */
-  dangerTiles(): Vec[] {
-    return this.telegraphs.flatMap((t) => t.tiles);
-  }
-
-  // --- setup ------------------------------------------------------------
+  // ------------------------------------------------------------------ setup
 
   private loadChamber(index: number): void {
-    const plan = buildRoom(index, this.rng);
-    this.chamber = index;
+    const plan = buildRoom(index);
     this.walls = new Set(plan.walls);
     this.player.pos = { ...plan.start };
-    this.exit = plan.exit;
+    this.exit = plan.exit ? { ...plan.exit } : null;
     this.exitOpen = false;
-    this.telegraphs = [];
+    this.chamber = index;
     this.bossRoom = plan.boss;
-    this.shieldSpent = false;
-    this.aresTurns = 0;
+    this.telegraphs = [];
+    this.trail = [{ ...plan.start }];
+    this.wingedSteps = 0;
     this.enemies = plan.spawns.map((s) => ({
       id: this.nextId++,
       kind: s.kind,
       pos: { x: s.x, y: s.y },
-      hp: HP[s.kind],
-      maxHp: HP[s.kind],
+      hp: s.hp,
+      maxHp: s.hp,
       stunned: 0,
-      // The opening guard holds its ground, so the first two steps are safe.
-      stationary: index === 0,
+      stationary: s.stationary,
     }));
-    if (this.enemies.length === 0) this.exitOpen = true;
 
-    // Crossing a threshold gives a heart back, to a maximum of three. Without
-    // it a run is decided by whichever chamber went badly rather than by the
-    // Minotaur, and there is no way to recover from an early mistake --- which
-    // is the opposite of "try again, you have learnt something".
-    if (index > 0) {
-      this.player.hearts = Math.min(this.player.maxHearts, this.player.hearts + 1);
-    }
+    // A breath between chambers. Never above the three hearts you started with.
+    if (index > 0 && this.player.hearts < this.player.maxHearts) this.player.hearts++;
   }
 
-  restart(seed: number = Date.now()): void {
-    this.rng = mulberry32(seed);
+  restart(): void {
+    this.nextId = 1;
     this.player.hearts = this.player.maxHearts;
+    this.chambersCleared = 0;
     this.blessings = [];
     this.offer = [];
     this.phase = "playing";
-    this.chambersCleared = 0;
-    this.strikes = 0;
     this.stirred = false;
+    this.aresCharged = false;
+    this.aegis = false;
     this.loadChamber(0);
   }
 
-  // --- the turn ---------------------------------------------------------
+  // ------------------------------------------------------------- inspection
 
+  isWall(v: Vec): boolean {
+    return this.walls.has(key(v));
+  }
+
+  inBounds(v: Vec): boolean {
+    return v.x >= 0 && v.y >= 0 && v.x < this.size && v.y < this.size;
+  }
+
+  enemyAt(v: Vec): Enemy | undefined {
+    return this.enemies.find((e) => eq(e.pos, v));
+  }
+
+  /** Tiles currently marked for attack, for the renderer. */
+  markedTiles(): Vec[] {
+    return this.telegraphs.flatMap((t) => t.tiles);
+  }
+
+  /** Enemies mid-wind-up, so they can be drawn coiled rather than idle. */
+  isWindingUp(id: number): boolean {
+    return this.telegraphs.some((t) => t.ownerId === id);
+  }
+
+  hasBlessing(id: GodId): boolean {
+    return this.blessings.includes(id);
+  }
+
+  boss(): Enemy | undefined {
+    return this.enemies.find((e) => e.kind === "minotaur");
+  }
+
+  /** Blocked either by the labyrinth or by a body. */
+  private passable(v: Vec): boolean {
+    return this.inBounds(v) && !this.isWall(v) && !this.enemyAt(v);
+  }
+
+  // ------------------------------------------------------------------- turn
+
+  /**
+   * One key press. Returns everything that happened, in order.
+   * A press into a wall returns a single `blocked` and consumes no turn.
+   */
   input(dir: Dir): GameEvent[] {
-    if (this.phase !== "playing") return [];
     const ev: GameEvent[] = [];
+    if (this.phase !== "playing") return ev;
+
     const step = DIRS[dir];
     const target = add(this.player.pos, step);
 
-    // Walking into rock costs nothing. Wasting a turn on a mistyped key would
-    // punish exactly the experimenting the opening is trying to invite.
     if (!this.inBounds(target) || this.isWall(target)) {
       ev.push({ t: "blocked", at: target });
       return ev;
     }
 
     this.stirred = true;
+    this.stunnedNow.clear();
+
     const foe = this.enemyAt(target);
     if (foe) {
-      ev.push(...this.strike(foe, step));
+      ev.push(...this.strike(foe));
     } else {
-      ev.push({ t: "move", from: { ...this.player.pos }, to: { ...target } });
-      this.player.pos = { ...target };
+      ev.push(...this.walk(target, step));
     }
 
-    // Tiles marked last turn go off now: one move is all you ever get.
+    // Everything marked last turn goes off now, wherever Theseus ended up.
     ev.push(...this.resolveTelegraphs());
     if (this.phase !== "playing") return ev;
 
-    if (this.hasBlessing("hermes") && this.rng() < 0.25) {
-      ev.push({ t: "freeStep" });
-    } else {
-      ev.push(...this.enemyTurn());
-    }
-    if (this.aresTurns > 0) this.aresTurns--;
-
+    ev.push(...this.enemyTurn());
     ev.push(...this.settle());
     return ev;
   }
 
-  /** Accept the offered god and step into the next chamber. */
-  choose(id: GodId): GameEvent[] {
-    if (this.phase !== "blessing") return [];
-    this.blessings.push(id);
-    this.offer = [];
-    this.phase = "playing";
-    this.loadChamber(this.queued);
-    return [{ t: "exit" }];
-  }
-
-  // --- player actions ---------------------------------------------------
-
-  private strike(foe: Enemy, step: Vec): GameEvent[] {
+  private walk(target: Vec, step: Vec): GameEvent[] {
     const ev: GameEvent[] = [];
-    const at = { ...foe.pos };
-    this.strikes++;
+    ev.push({ t: "move", from: { ...this.player.pos }, to: { ...target } });
+    this.moveTo(target);
 
-    // The Minotaur's hide turns a blade. Only the crash leaves it open, and
-    // the ringing clang is the whole explanation the player gets.
-    if (foe.kind === "minotaur" && foe.stunned === 0) {
-      ev.push({ t: "clang", at });
-      return ev;
-    }
-
-    // A blow that lands interrupts the wind-up: whatever this foe marked on
-    // its last turn goes out with it. Without this, a foe standing next to you
-    // marks the tile you are on, so every single strike traded a heart --- the
-    // opening chamber charged the player a third of their life for working out
-    // what the sword does. Two foes closing at once still only let you
-    // interrupt one, so which one you hit is still the decision.
-    this.telegraphs = this.telegraphs.filter((t) => t.ownerId !== foe.id);
-
-    let damage = 1;
-    if (this.hasBlessing("artemis") && this.strikes % 3 === 0) damage *= 2;
-    if (this.hasBlessing("ares") && this.aresTurns > 0) damage += 1;
-
-    const killed = this.wound(foe, damage);
-    ev.push({ t: "attack", id: foe.id, at, damage, killed });
-    if (killed && this.hasBlessing("ares")) this.aresTurns = 3;
-
-    if (this.hasBlessing("zeus")) {
-      const near = this.enemies.find((e) => e.id !== foe.id && adjacent(e.pos, at));
-      if (near) {
-        const chainAt = { ...near.pos };
-        const chainKilled = this.wound(near, 1);
-        ev.push({ t: "chain", id: near.id, at: chainAt, killed: chainKilled });
+    // Hermes. Every fourth move carries one tile further, in the same
+    // direction, if there is anywhere to land. Never onto a foe: this is a
+    // stride, not a charge.
+    this.wingedSteps++;
+    if (this.hasBlessing("hermes") && this.wingedSteps % 4 === 0) {
+      const further = add(target, step);
+      if (this.passable(further)) {
+        ev.push({ t: "winged", from: { ...target }, to: { ...further } });
+        this.moveTo(further);
       }
     }
-
-    if (!killed && this.hasBlessing("poseidon")) {
-      const dest = add(foe.pos, step);
-      if (this.free(dest)) {
-        const from = { ...foe.pos };
-        foe.pos = { ...dest };
-        ev.push({ t: "push", from, to: { ...dest } });
-      }
-    }
-
     return ev;
   }
 
-  /** Returns true if the wound was fatal. A corpse's marked tiles go with it. */
-  private wound(foe: Enemy, damage: number): boolean {
-    foe.hp -= damage;
-    if (foe.hp > 0) return false;
-    this.enemies = this.enemies.filter((e) => e.id !== foe.id);
-    this.telegraphs = this.telegraphs.filter((t) => t.ownerId !== foe.id);
-    return true;
+  private moveTo(v: Vec): void {
+    this.player.pos = { ...v };
+    this.trail.push({ ...v });
+    if (this.trail.length > THREAD_LENGTH) this.trail.shift();
   }
 
-  private hurt(): GameEvent[] {
-    if (this.hasBlessing("athena") && !this.shieldSpent) {
-      this.shieldSpent = true;
-      return [{ t: "shielded", at: { ...this.player.pos } }];
+  private strike(foe: Enemy): GameEvent[] {
+    const ev: GameEvent[] = [];
+
+    // The Minotaur's hide turns a blade unless the charge has just cost him
+    // his footing. Baiting him into a wall is the only way through.
+    if (foe.kind === "minotaur" && foe.stunned <= 0) {
+      ev.push({ t: "clang", at: { ...foe.pos } });
+      return ev;
+    }
+
+    const damage = 1 + (this.aresCharged ? 1 : 0);
+    this.aresCharged = false;
+    foe.hp -= damage;
+    const killed = foe.hp <= 0;
+    ev.push({ t: "attack", id: foe.id, at: { ...foe.pos }, damage, killed });
+
+    if (killed) {
+      this.enemies = this.enemies.filter((e) => e.id !== foe.id);
+      // A dead thing does not finish its swing. Its marks come off the floor.
+      this.telegraphs = this.telegraphs.filter((t) => t.ownerId !== foe.id);
+      if (this.hasBlessing("ares")) {
+        this.aresCharged = true;
+        ev.push({ t: "aresCharged" });
+      }
+    }
+    return ev;
+  }
+
+  // ------------------------------------------------------------- telegraphs
+
+  private mark(owner: Enemy, tiles: Vec[], kind: Telegraph["kind"], dir: Vec): GameEvent {
+    this.telegraphs.push({ ownerId: owner.id, tiles, kind, dir });
+    return { t: "telegraph", id: owner.id, tiles, kind };
+  }
+
+  /**
+   * Every mark laid last turn resolves, in the order it was laid. The tiles
+   * are exactly the ones that were drawn: nothing re-aims, nothing spreads.
+   */
+  private resolveTelegraphs(): GameEvent[] {
+    const ev: GameEvent[] = [];
+    const pending = this.telegraphs;
+    this.telegraphs = [];
+
+    for (const t of pending) {
+      const owner = this.enemies.find((e) => e.id === t.ownerId);
+      if (!owner) continue;
+
+      if (t.kind === "charge") {
+        ev.push(...this.resolveCharge(owner, t));
+      } else {
+        const hit = t.tiles.some((tile) => eq(tile, this.player.pos));
+        ev.push({
+          t: "lash",
+          id: owner.id,
+          from: { ...owner.pos },
+          tiles: t.tiles,
+          kind: t.kind,
+          hit,
+        });
+        if (hit) ev.push(...this.wound());
+      }
+      if (this.phase !== "playing") break;
+    }
+    return ev;
+  }
+
+  /** The Minotaur runs his marked line until something stops him. */
+  private resolveCharge(m: Enemy, t: Telegraph): GameEvent[] {
+    const ev: GameEvent[] = [];
+    const path: Vec[] = [];
+    let at = m.pos;
+    let hit = false;
+    let crashed = true;
+
+    for (const tile of t.tiles) {
+      if (!this.passable(tile) && !eq(tile, this.player.pos)) break;
+      if (eq(tile, this.player.pos)) {
+        // He runs into Theseus and stops dead. No wall, so no crash: the only
+        // way to earn the opening is to be somewhere else.
+        hit = true;
+        crashed = false;
+        break;
+      }
+      at = tile;
+      path.push({ ...tile });
+    }
+
+    m.pos = { ...at };
+    ev.push({ t: "lash", id: m.id, from: { ...t.tiles[0]! }, tiles: path, kind: "charge", hit });
+
+    if (hit) {
+      ev.push(...this.wound());
+    } else if (crashed) {
+      m.stunned = CRASH_STUN;
+      this.stunnedNow.add(m.id);
+      ev.push({ t: "stunned", at: { ...m.pos } });
+    }
+    return ev;
+  }
+
+  private wound(): GameEvent[] {
+    const ev: GameEvent[] = [];
+    if (this.aegis) {
+      this.aegis = false;
+      ev.push({ t: "shielded", at: { ...this.player.pos } });
+      return ev;
     }
     this.player.hearts--;
-    const ev: GameEvent[] = [{ t: "hurt", at: { ...this.player.pos } }];
+    ev.push({ t: "hurt", at: { ...this.player.pos } });
     if (this.player.hearts <= 0) {
       this.phase = "lost";
       ev.push({ t: "lost" });
@@ -254,174 +356,171 @@ export class Engine {
     return ev;
   }
 
-  // --- the labyrinth answers -------------------------------------------
-
-  private resolveTelegraphs(): GameEvent[] {
-    const ev: GameEvent[] = [];
-    const pending = this.telegraphs;
-    this.telegraphs = [];
-    for (const t of pending) {
-      const owner = this.enemies.find((e) => e.id === t.ownerId);
-      if (!owner) continue;
-      if (t.kind === "charge") {
-        ev.push(...this.resolveCharge(owner, t));
-      } else if (t.tiles.some((tile) => eq(tile, this.player.pos))) {
-        ev.push(...this.hurt());
-      }
-      if (this.phase === "lost") break;
-    }
-    return ev;
-  }
-
-  private resolveCharge(m: Enemy, t: Telegraph): GameEvent[] {
-    const ev: GameEvent[] = [];
-    let hit = false;
-    let dest = m.pos;
-    for (const tile of t.tiles) {
-      // Theseus stops the charge with his body rather than being run through.
-      if (eq(tile, this.player.pos)) {
-        hit = true;
-        break;
-      }
-      if (this.enemies.some((e) => e.id !== m.id && eq(e.pos, tile))) break;
-      dest = tile;
-    }
-    m.pos = { ...dest };
-    ev.push({ t: "charge", path: t.tiles, hit });
-    if (hit) ev.push(...this.hurt());
-    // A stun has to be long enough to be worth answering. It is decremented
-    // once more by the enemy turn that follows this one, so 3 buys two blows
-    // and 2 buys one --- and it wakes faster the more it is wounded, which is
-    // the "again, but harder" the fight is built on.
-    m.stunned = m.hp > 2 ? 3 : 2;
-    ev.push({ t: "stunned", at: { ...m.pos } });
-    return ev;
-  }
+  // ----------------------------------------------------------- enemy brains
 
   private enemyTurn(): GameEvent[] {
     const ev: GameEvent[] = [];
     for (const e of [...this.enemies]) {
       if (!this.enemies.includes(e)) continue;
+
+      // Stunned this very input: the count starts running next turn, not now.
+      if (this.stunnedNow.has(e.id)) continue;
       if (e.stunned > 0) {
         e.stunned--;
         continue;
       }
-      if (e.kind === "gorgon") ev.push(...this.gorgonTurn(e));
-      else if (e.kind === "minotaur") ev.push(...this.minotaurTurn(e));
+      // Already wound up. It is committed to the mark it drew last turn.
+      if (this.isWindingUp(e.id)) continue;
+      if (e.stationary) continue;
+
+      if (e.kind === "minotaur") ev.push(...this.minotaurTurn(e));
+      else if (e.kind === "medusa") ev.push(...this.medusaTurn(e));
       else ev.push(...this.stalkerTurn(e));
     }
     return ev;
   }
 
-  /** Skeletons and harpies: close the distance, then mark where you stand. */
+  /** Skeletons close the distance, then mark the tile they mean to hit. */
   private stalkerTurn(e: Enemy): GameEvent[] {
-    if (!adjacent(e.pos, this.player.pos) && !e.stationary) {
-      for (let i = 0; i < SPEED[e.kind]; i++) {
-        if (adjacent(e.pos, this.player.pos)) break;
-        if (!this.stepToward(e)) break;
-      }
+    if (manhattan(e.pos, this.player.pos) === 1) {
+      const dir = {
+        x: Math.sign(this.player.pos.x - e.pos.x),
+        y: Math.sign(this.player.pos.y - e.pos.y),
+      };
+      return [this.mark(e, [{ ...this.player.pos }], "slash", dir)];
     }
-    if (adjacent(e.pos, this.player.pos)) return this.mark(e, [{ ...this.player.pos }], "strike");
-    return [];
-  }
-
-  /** Gorgons: line up, then mark the whole row or column until it meets rock. */
-  private gorgonTurn(e: Enemy): GameEvent[] {
-    const line = this.lineToPlayer(e);
-    if (line) return this.mark(e, line, "strike");
     this.stepToward(e);
     return [];
   }
 
-  private minotaurTurn(m: Enemy): GameEvent[] {
-    const line = this.lineToPlayer(m);
-    if (line) return this.mark(m, line, "charge");
-    // Half-dead, it hunts at a run: it finds your row or column in one turn
-    // instead of two, so the gap between charges closes as the fight goes on.
-    this.stepToward(m);
-    if (m.hp <= 2 && !this.lineToPlayer(m)) this.stepToward(m);
+  /**
+   * Medusas never come to you. They wait until you share a row or column, and
+   * then mark all of it --- so the answer is always a step off the line.
+   */
+  private medusaTurn(e: Enemy): GameEvent[] {
+    const line = this.lineToPlayer(e);
+    if (line) return [this.mark(e, line.tiles, "beam", line.dir)];
+    this.stepToward(e);
     return [];
   }
 
   /**
-   * The tiles from an enemy toward the player along a shared row or column,
-   * running until they hit rock or the edge. Null if they aren't lined up.
+   * The Minotaur only charges down a line he already shares with Theseus, so
+   * standing in one is an invitation, and stepping out of it is the answer.
    */
-  private lineToPlayer(e: Enemy): Vec[] | null {
+  private minotaurTurn(e: Enemy): GameEvent[] {
+    const line = this.lineToPlayer(e);
+    if (line) {
+      // The whole run, wall to wall --- not merely as far as Theseus.
+      const tiles: Vec[] = [];
+      let at = add(e.pos, line.dir);
+      while (this.inBounds(at) && !this.isWall(at)) {
+        tiles.push({ ...at });
+        at = add(at, line.dir);
+      }
+      return [this.mark(e, tiles, "charge", line.dir)];
+    }
+    this.stepToward(e);
+    return [];
+  }
+
+  /**
+   * The unbroken run of tiles from an enemy to the player, when they share a
+   * row or column with nothing in between. Null otherwise.
+   */
+  private lineToPlayer(e: Enemy): { tiles: Vec[]; dir: Vec } | null {
     const p = this.player.pos;
     if (e.pos.x !== p.x && e.pos.y !== p.y) return null;
+    if (eq(e.pos, p)) return null;
+
     const dir = { x: Math.sign(p.x - e.pos.x), y: Math.sign(p.y - e.pos.y) };
-    if (dir.x === 0 && dir.y === 0) return null;
     const tiles: Vec[] = [];
-    let c = add(e.pos, dir);
-    while (this.inBounds(c) && !this.isWall(c)) {
-      tiles.push({ ...c });
-      c = add(c, dir);
+    let at = add(e.pos, dir);
+    while (!eq(at, p)) {
+      if (!this.inBounds(at) || this.isWall(at) || this.enemyAt(at)) return null;
+      tiles.push({ ...at });
+      at = add(at, dir);
     }
-    return tiles.length > 0 ? tiles : null;
+    tiles.push({ ...p });
+    return { tiles, dir };
   }
 
-  private mark(e: Enemy, tiles: Vec[], kind: Telegraph["kind"]): GameEvent[] {
-    this.telegraphs.push({ ownerId: e.id, tiles, kind });
-    return [{ t: "telegraph", tiles }];
-  }
-
-  private stepToward(e: Enemy): boolean {
+  /** One tile closer, on the axis with the most ground to make up. */
+  private stepToward(e: Enemy): void {
     const dx = this.player.pos.x - e.pos.x;
     const dy = this.player.pos.y - e.pos.y;
-    const opts: Vec[] = [];
-    const horizontalFirst = Math.abs(dx) >= Math.abs(dy);
-    const h = { x: Math.sign(dx), y: 0 };
-    const v = { x: 0, y: Math.sign(dy) };
-    if (horizontalFirst) {
-      if (dx !== 0) opts.push(h);
-      if (dy !== 0) opts.push(v);
-    } else {
-      if (dy !== 0) opts.push(v);
-      if (dx !== 0) opts.push(h);
-    }
-    for (const d of opts) {
-      const next = add(e.pos, d);
-      if (this.free(next)) {
-        e.pos = next;
-        return true;
+    const options: Vec[] =
+      Math.abs(dx) >= Math.abs(dy)
+        ? [
+            { x: Math.sign(dx), y: 0 },
+            { x: 0, y: Math.sign(dy) },
+          ]
+        : [
+            { x: 0, y: Math.sign(dy) },
+            { x: Math.sign(dx), y: 0 },
+          ];
+
+    for (const o of options) {
+      if (o.x === 0 && o.y === 0) continue;
+      const to = add(e.pos, o);
+      if (this.passable(to) && !eq(to, this.player.pos)) {
+        e.pos = to;
+        return;
       }
     }
-    return false;
   }
 
-  // --- end of turn ------------------------------------------------------
+  // ------------------------------------------------------------ after-turn
 
   private settle(): GameEvent[] {
     const ev: GameEvent[] = [];
 
-    if (this.enemies.length === 0 && !this.exitOpen) {
+    if (this.bossRoom) {
+      if (!this.boss()) {
+        this.chambersCleared = CHAMBER_COUNT;
+        this.phase = "won";
+        ev.push({ t: "won" });
+      }
+      return ev;
+    }
+
+    if (!this.exitOpen && this.enemies.length === 0) {
       this.exitOpen = true;
       ev.push({ t: "roomClear" });
     }
 
-    // The boss chamber has no door: killing the Minotaur is the way out.
-    if (this.bossRoom && this.enemies.length === 0) {
-      this.chambersCleared = CHAMBER_COUNT;
-      this.phase = "won";
-      ev.push({ t: "won" });
-      return ev;
-    }
-
-    if (this.exit && this.exitOpen && eq(this.player.pos, this.exit)) {
+    if (this.exitOpen && this.exit && eq(this.player.pos, this.exit)) {
       this.chambersCleared = this.chamber + 1;
-      this.queued = this.chamber + 1;
-      const unseen = GODS.filter((g) => !this.hasBlessing(g.id));
-      if (BLESSING_AFTER.has(this.chamber) && unseen.length >= 2) {
-        this.offer = sample(this.rng, unseen, 2);
-        this.phase = "blessing";
-        ev.push({ t: "blessing" });
-        return ev;
-      }
-      this.loadChamber(this.queued);
       ev.push({ t: "exit" });
-    }
 
+      if (BLESSING_AFTER.has(this.chamber)) {
+        const unseen = GODS.filter((g) => !this.hasBlessing(g.id));
+        if (unseen.length > 0) {
+          this.offer = unseen;
+          this.phase = "blessing";
+          ev.push({ t: "blessing" });
+          return ev;
+        }
+      }
+      this.loadChamber(this.chamber + 1);
+    }
     return ev;
+  }
+
+  /** Take a god's gift and walk on into the next chamber. */
+  choose(id: GodId): void {
+    if (this.phase !== "blessing") return;
+    if (!this.hasBlessing(id)) this.blessings.push(id);
+    if (id === "athena") this.aegis = true;
+    this.offer = [];
+    this.phase = "playing";
+    this.loadChamber(this.chamber + 1);
+  }
+
+  /** The named gifts taken this run, in the order they were taken. */
+  favours(): God[] {
+    return this.blessings
+      .map((id) => GODS.find((g) => g.id === id))
+      .filter((g): g is God => Boolean(g));
   }
 }
